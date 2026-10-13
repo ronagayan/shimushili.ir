@@ -50,7 +50,7 @@
 #include "tv_codes.h"
 #include "web_assets.h"
 
-#define FW_VERSION "1.3.2"
+#define FW_VERSION "1.4.0"
 #define HOSTNAME   "irblaster"
 #define AP_NAME    "IR_WIFI"
 #define MAX_CUSTOM 60
@@ -60,8 +60,34 @@
 
 // Default pins. These are guesses – use the pin finder in Settings
 // to find the real ones on your board, then save.
+// The app's hardware check finds the real pins automatically.
+#if CONFIG_IDF_TARGET_ESP32S3
+#define CHIP_ID "esp32s3"
+#define DEFAULT_TX_PIN 4
+#define DEFAULT_RX_PIN 5
+#define MAX_GPIO 48
+// Usable GPIOs (skips 19/20 USB, 26-34 flash, 35-37 octal PSRAM, 0/3/45/46 strapping).
+const uint8_t SCAN_PINS[] = {1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48};
+const uint8_t TX_CANDIDATES[] = {4, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48};
+bool inputOnly(uint8_t) { return false; }
+#else
+#define CHIP_ID "esp32"
 #define DEFAULT_TX_PIN 4
 #define DEFAULT_RX_PIN 14
+#define MAX_GPIO 39
+const uint8_t SCAN_PINS[] = {2, 4, 5, 12, 13, 14, 15, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39};
+const uint8_t TX_CANDIDATES[] = {4, 2, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33};
+bool inputOnly(uint8_t p) { return p >= 34; }
+#endif
+
+bool validRx(int p) {
+  for (uint8_t q : SCAN_PINS) if (q == p) return true;
+  return false;
+}
+bool validTx(int p) {
+  for (uint8_t q : TX_CANDIDATES) if (q == p) return true;
+  return false;
+}
 
 // ---------------------------------------------------------------- globals
 WebServer server(80);
@@ -556,12 +582,11 @@ void handleLearning() {
 }
 
 // ---------------------------------------------------------------- pin finder
-const uint8_t SCAN_PINS[] = {2, 4, 5, 12, 13, 14, 15, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39};
 
 String scanRxPins() {
-  uint32_t counts[40] = {0};
+  uint32_t counts[MAX_GPIO + 1] = {0};
   for (uint8_t p : SCAN_PINS)
-    if (p != txPin && p != rxPin) pinMode(p, p >= 34 ? INPUT : INPUT_PULLUP);
+    if (p != txPin && p != rxPin) pinMode(p, inputOnly(p) ? INPUT : INPUT_PULLUP);
   delay(5);
   uint32_t prev0 = REG_READ(GPIO_IN_REG), prev1 = REG_READ(GPIO_IN1_REG);
   uint32_t end = millis() + 6000, n = 0;
@@ -590,7 +615,6 @@ String scanRxPins() {
 
 // Find the IR LED pin by itself: try each candidate pin and listen with our own
 // receiver (works when the light bounces back, e.g. off a hand in front of the box).
-const uint8_t TX_CANDIDATES[] = {4, 2, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33};
 int autoFindTx() {
   if (learnMode != L_IDLE) return -1;
   for (uint8_t p : TX_CANDIDATES) {
@@ -650,7 +674,7 @@ String stateJson() {
   s += ",\"portal\":" + String(portalMode ? "true" : "false");
   s += ",\"admin\":" + String(adminPass.length() ? "true" : "false");
   s += ",\"fs\":" + String(fsOk ? "true" : "false");
-  s += ",\"tx\":" + String(txPin) + ",\"rx\":" + String(rxPin) + ",\"fw\":\"" FW_VERSION "\"";
+  s += ",\"tx\":" + String(txPin) + ",\"rx\":" + String(rxPin) + ",\"fw\":\"" FW_VERSION "\",\"chip\":\"" CHIP_ID "\"";
   s += ",\"ac\":" + acJson();
   s += ",\"tv\":{\"set\":" + String(tvSet) + ",\"brands\":[";
   for (int i = 0; i < TV_NBRANDS; i++) s += String(i ? "," : "") + "\"" + TV_BRAND_NAMES[i] + "\"";
@@ -831,8 +855,8 @@ void handlePins() {
   if (!guardAdmin()) return;
   bool reboot = false;
   int tx = server.arg("tx").toInt(), rx = server.arg("rx").toInt();
-  if (server.hasArg("tx") && tx >= 0 && tx <= 33 && tx != txPin) { prefs.putInt("tx", tx); reboot = true; }
-  if (server.hasArg("rx") && rx >= 0 && rx <= 39 && rx != rxPin) { prefs.putInt("rx", rx); reboot = true; }
+  if (server.hasArg("tx") && validTx(tx) && tx != txPin) { prefs.putInt("tx", tx); reboot = true; }
+  if (server.hasArg("rx") && validRx(rx) && rx != rxPin) { prefs.putInt("rx", rx); reboot = true; }
   sendJson("{\"ok\":true,\"reboot\":" + String(reboot ? "true" : "false") + "}");
   if (reboot) { delay(300); ESP.restart(); }
 }
@@ -1095,7 +1119,7 @@ void setupRoutes() {
   server.on("/api/admin/test/tx", HTTP_GET, []() {
     if (!guardAdmin()) return;
     int p = server.arg("pin").toInt();
-    if (p < 0 || p > 33 || p == 1 || p == 3 || (p >= 6 && p <= 11)) { sendErr("פין לא תקין"); return; }
+    if (!validTx(p)) { sendErr("פין לא תקין"); return; }
     testTxPin(p, server.hasArg("n") ? constrain((int)server.arg("n").toInt(), 1, 40) : 8);
     sendJson("{\"ok\":true}");
   });
@@ -1167,6 +1191,8 @@ void setup() {
   prefs.begin("irb", false);
   txPin = prefs.getInt("tx", DEFAULT_TX_PIN);
   rxPin = prefs.getInt("rx", DEFAULT_RX_PIN);
+  if (!validTx(txPin)) txPin = DEFAULT_TX_PIN;
+  if (!validRx(rxPin)) rxPin = DEFAULT_RX_PIN;
   tvSet = prefs.getInt("tvs", -1);
   if (tvSet >= (int)TV_NSETS) tvSet = -1;
   adminPass = prefs.getString("adm", "");

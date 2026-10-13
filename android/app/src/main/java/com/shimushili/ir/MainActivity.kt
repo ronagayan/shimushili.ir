@@ -138,8 +138,10 @@ fun SettingsScreen(onBack: () -> Unit, onNav: (String) -> Unit) {
 
 @Composable
 fun FirmwareScreen(onDone: () -> Unit) {
-    var current by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { current = runCatching { parseState(Api.call("/api/state")).version }.getOrElse { "" } }
-    val c = current
-    if (c == null) StepScreen("🔄", "טוען…", "") { CircularProgressIndicator() } else FirmwareUpdate(c, onDone)
+    var info by remember { mutableStateOf<Pair<String, String>?>(null) }
+    LaunchedEffect(Unit) {
+        info = runCatching { Api.call("/api/state").let { it.optString("v") to it.optString("chip", "esp32") } }.getOrElse { "" to "esp32" }
+    }
+    val c = info
+    if (c == null) StepScreen("🔄", "טוען…", "") { CircularProgressIndicator() } else FirmwareUpdate(c.first, c.second, onDone)
 }

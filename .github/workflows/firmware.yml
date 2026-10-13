@@ -14,13 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Pick the newest firmware
+      - name: Pick the newest firmware per chip
         run: |
-          f=$(ls firmware/releases/IRBlaster-*.bin | sort -V | tail -1)
-          v=$(basename "$f" .bin | sed 's/IRBlaster-//')
-          cp "$f" firmware.bin
+          cd firmware/releases
+          esp32=$(ls IRBlaster-*.bin | grep -v -- '-s3' | sort -V | tail -1)
+          v=$(basename "$esp32" .bin | sed 's/IRBlaster-//')
+          cp "$esp32" ../../firmware-esp32.bin
+          cp "$esp32" ../../firmware.bin            # older apps
+          [ -f "IRBlaster-$v-s3.bin" ] && cp "IRBlaster-$v-s3.bin" ../../firmware-esp32s3.bin
+          [ -f "IRBlaster-$v-s3-factory.bin" ] && cp "IRBlaster-$v-s3-factory.bin" ../../firmware-esp32s3-factory.bin
+          cd ../..
           echo "{\"version\": \"$v\"}" > version.json
-          echo "Publishing $v"
+          ls -la firmware*.bin version.json
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: firmware-latest
@@ -28,6 +33,8 @@ jobs:
           prerelease: true
           make_latest: false
           files: |
-            firmware.bin
+            firmware*.bin
             version.json
-          body: האפליקציה מעדכנת את השלט מכאן (הגדרות ← עדכון קושחה).
+          body: |
+            האפליקציה מעדכנת את השלט מכאן (הגדרות ← עדכון קושחה).
+            firmware-esp32s3-factory.bin = צריבה מלאה ליחידה חדשה דרך USB (כתובת 0x0).

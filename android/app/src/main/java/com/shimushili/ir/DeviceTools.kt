@@ -119,8 +119,8 @@ suspend fun latestFirmware(): String? = withContext(Dispatchers.IO) {
     }.getOrNull()
 }
 
-suspend fun uploadFirmware(): String = withContext(Dispatchers.IO) {
-    val bin = URL(FW_RELEASE + "firmware.bin").openStream().use { it.readBytes() }
+suspend fun uploadFirmware(chip: String): String = withContext(Dispatchers.IO) {
+    val bin = URL(FW_RELEASE + "firmware-$chip.bin").openStream().use { it.readBytes() }
     if (bin.size < 100_000 || bin[0] != 0xE9.toByte()) throw ApiException("קובץ הקושחה שהורד לא תקין")
     val boundary = "----irblaster" + System.currentTimeMillis()
     val head = "--$boundary\r\nContent-Disposition: form-data; name=\"update\"; filename=\"firmware.bin\"\r\nContent-Type: application/octet-stream\r\n\r\n".toByteArray()
@@ -143,7 +143,7 @@ suspend fun uploadFirmware(): String = withContext(Dispatchers.IO) {
 }
 
 @Composable
-fun FirmwareUpdate(current: String, onDone: () -> Unit) {
+fun FirmwareUpdate(current: String, chip: String, onDone: () -> Unit) {
     val scope = rememberCoroutineScope()
     var latest by remember { mutableStateOf<String?>(null) }
     var phase by remember { mutableStateOf("check") }
@@ -165,7 +165,7 @@ fun FirmwareUpdate(current: String, onDone: () -> Unit) {
                 phase = "updating"
                 scope.launch {
                     try {
-                        uploadFirmware()
+                        uploadFirmware(chip)
                         phase = "rebooting"
                         msg = if (waitForDevice()) "השלט עודכן לגרסה $latest" else "העדכון נשלח. השלט עוד מופעל מחדש – חכה רגע."
                         phase = "done"
