@@ -2,7 +2,9 @@
 
 package com.shimushili.ir
 
+import android.content.Intent
 import android.net.Network
+import android.provider.Settings
 import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -65,11 +67,14 @@ fun Onboarding(onDone: () -> Unit) {
 }
 
 // ---------------------------------------------------------------- find / connect the device
+// Step 1: join the device's own network (IR_WIFI) – automatically, or by hand in WiFi settings.
+// Step 2: send it the home WiFi. Step 3 (AC/TV) runs after onFound().
 @Composable
 fun FindDevice(onFound: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val apBase = "http://192.168.4.1"
+    val canAuto = Build.VERSION.SDK_INT >= 29
     var phase by remember { mutableStateOf("searching") }
     var msg by remember { mutableStateOf("") }
     var net by remember { mutableStateOf<Network?>(null) }
@@ -78,11 +83,11 @@ fun FindDevice(onFound: () -> Unit) {
     var pass by remember { mutableStateOf("") }
     var round by remember { mutableIntStateOf(0) }
 
-    suspend fun scanNetworks(n: Network?) {
-        val arr = runCatching { JSONArray(Api.raw("/scan", apBase, n)) }.getOrNull()
+    suspend fun loadNetworks(n: Network?) {
+        val arr = runCatching { JSONArray(Api.raw("/scan", apBase, n, timeoutMs = 9000)) }.getOrNull()
         if (arr == null) {
-            phase = "error"
-            msg = "התחברנו לרשת של השלט אבל הוא לא עונה. נתק אותו מהחשמל לכמה שניות ונסה שוב."
+            msg = "התחברנו ל-IR_WIFI אבל השלט לא עונה. נתק אותו מהחשמל לכמה שניות ונסה שוב."
+            phase = "connect"
             return
         }
         networks = List(arr.length()) { arr.getJSONObject(it).getString("s") }.distinct()
@@ -90,20 +95,40 @@ fun FindDevice(onFound: () -> Unit) {
         phase = "wifi"
     }
 
-    LaunchedEffect(round) {
-        phase = "searching"
-        val found = Discovery.find(ctx)
-        if (found != null && Discovery.pair(found)) { onFound(); return@LaunchedEffect }
-        if (Build.VERSION.SDK_INT < 29) { phase = "manual"; return@LaunchedEffect }
-        phase = "ap"
-        val n = ApLink.connect(ctx)
-        if (n == null) {
-            phase = "error"
-            msg = "לא הצלחנו להתחבר לרשת IR_WIFI של השלט. ודא שהוא מחובר לחשמל, ואשר את החיבור בחלון שקופץ."
-            return@LaunchedEffect
+    fun openWifiSettings() {
+        phase = "manual"
+        val i = if (Build.VERSION.SDK_INT >= 29) Intent(Settings.Panel.ACTION_WIFI) else Intent(Settings.ACTION_WIFI_SETTINGS)
+        runCatching { ctx.startActivity(i) }
+    }
+
+    fun autoConnect() {
+        phase = "auto"
+        scope.launch {
+            val n = ApLink.connect(ctx)
+            if (n == null) {
+                msg = "החיבור האוטומטי לא הצליח – אפשר להתחבר בעצמך, זה לוקח רגע."
+                phase = "connect"
+            } else {
+                net = n
+                loadNetworks(n)
+            }
         }
-        net = n
-        scanNetworks(n)
+    }
+
+    LaunchedEffect(round) {  // maybe it's already on the home network
+        phase = "searching"
+        val found = Discovery.find(ctx, 5000)
+        if (found != null && Discovery.pair(found)) onFound() else phase = "connect"
+    }
+
+    if (phase == "manual") {
+        LaunchedEffect(Unit) {  // wait until the phone is on IR_WIFI, then continue by itself
+            while (true) {
+                val n = ApLink.findManual(ctx)
+                if (n != null) { net = n; loadNetworks(n); break }
+                delay(2000)
+            }
+        }
     }
 
     fun join() {
@@ -132,7 +157,7 @@ fun FindDevice(onFound: () -> Unit) {
                 if (!ok) { val f = Discovery.find(ctx, 10_000); ok = f != null && Discovery.pair(f) }
                 if (ok) onFound() else {
                     phase = "error"
-                    msg = "השלט מחובר לרשת, אבל הטלפון עוד לא מוצא אותו. ודא שהטלפון חזר לרשת $ssid ולחץ נסה שוב."
+                    msg = "השלט מחובר לרשת $ssid, אבל הטלפון עוד לא מוצא אותו. ודא שהטלפון חזר לרשת $ssid ולחץ נסה שוב."
                 }
             } catch (e: Exception) {
                 msg = e.message ?: "שגיאה"
@@ -142,17 +167,34 @@ fun FindDevice(onFound: () -> Unit) {
     }
 
     when (phase) {
-        "searching" -> StepScreen("🔎", "מחפש את השלט…", "") { CircularProgressIndicator() }
-        "ap" -> StepScreen("📶", "מתחבר לשלט", "בחלון שיופיע אשר את החיבור לרשת IR_WIFI.") { CircularProgressIndicator() }
-        "manual" -> StepScreen("📶", "התחבר לרשת של השלט", "פתח את הגדרות ה-WiFi בטלפון, התחבר לרשת IR_WIFI וחזור לכאן.") {
-            WideButton("התחברתי") { scope.launch { scanNetworks(null) } }
+        "searching" -> StepScreen("🔎", "מחפש את השלט…", "אם השלט כבר מחובר לרשת הביתית, נמצא אותו עכשיו.") { CircularProgressIndicator() }
+        "connect" -> StepScreen(
+            "📶", "שלב 1 מתוך 3: התחברות לשלט",
+            (if (msg.isNotEmpty()) msg + "\n\n" else "") + "השלט משדר רשת WiFi בשם IR_WIFI. נתחבר אליה כדי להעביר לו את פרטי הרשת הביתית.",
+        ) {
+            if (canAuto) WideButton("התחבר אוטומטית") { autoConnect() }
+            WideButton("אתחבר בעצמי בהגדרות ה-WiFi", primary = !canAuto) { openWifiSettings() }
+            TextButton(onClick = { msg = ""; round++ }) { Text("השלט כבר מחובר לרשת הביתית – חפש שוב") }
+            Text(
+                "לא רואה רשת IR_WIFI? נתק את השלט מהחשמל, חבר שוב וחכה חצי דקה.",
+                style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center,
+            )
+        }
+        "auto" -> StepScreen("📶", "מתחבר ל-IR_WIFI…", "אשר את החיבור בחלון שיופיע.") { CircularProgressIndicator() }
+        "manual" -> StepScreen(
+            "📶", "התחבר לרשת IR_WIFI",
+            "1. ברשימת ה-WiFi בחר IR_WIFI.\n2. אם כתוב שאין אינטרנט או נפתח דף התחברות – סגור אותו ובחר להישאר מחובר.\n3. חזור לכאן. נמשיך לבד ברגע שהחיבור יזוהה.",
+        ) {
+            CircularProgressIndicator()
+            WideButton("פתח שוב את הגדרות ה-WiFi", primary = false) { openWifiSettings() }
+            TextButton(onClick = { phase = "connect" }) { Text("חזרה") }
         }
         "joining" -> StepScreen("⏳", "מחבר את השלט לרשת $ssid", "זה לוקח עד חצי דקה.") { CircularProgressIndicator() }
         "returning" -> StepScreen("🏠", "כמעט סיימנו", "הטלפון חוזר לרשת הביתית ומחפש את השלט…") { CircularProgressIndicator() }
         "error" -> StepScreen("⚠️", "משהו לא הסתדר", msg) {
-            WideButton("נסה שוב") { ApLink.release(ctx); round++ }
+            WideButton("נסה שוב") { ApLink.release(ctx); msg = ""; round++ }
         }
-        else -> StepScreen("🏠", "לאיזו רשת לחבר את השלט?", msg) {
+        else -> StepScreen("🏠", "שלב 2 מתוך 3: לאיזו רשת לחבר את השלט?", msg) {
             networks.forEach { n ->
                 Surface(
                     onClick = { ssid = n },
@@ -194,7 +236,7 @@ fun AcSetup(onDone: () -> Unit) {
                 msg = m
                 phase = if (st == "done") "test" else "fail"
             }
-            StepScreen("❄️", "הגדרת המזגן", "כוון את השלט של המזגן אל השלט החכם ולחץ על כפתור כלשהו, למשל שינוי טמפרטורה.") {
+            StepScreen("❄️", "שלב 3 מתוך 3: הגדרת המזגן", "כוון את השלט של המזגן אל השלט החכם ולחץ על כפתור כלשהו, למשל שינוי טמפרטורה.") {
                 Pulse()
                 TextButton(onClick = { scope.launch { Api.cancelLearn() }; onDone() }) { Text("אין לי מזגן / דלג") }
             }
@@ -286,7 +328,7 @@ fun TvSetup(onDone: () -> Unit) {
                 msg = m
                 phase = if (st == "done") "test" else "fail"
             }
-            StepScreen("📺", "הגדרת הטלוויזיה", "כוון את השלט של הטלוויזיה אל השלט החכם ולחץ על ווליום או ערוץ.") {
+            StepScreen("📺", "שלב 3 מתוך 3: הגדרת הטלוויזיה", "כוון את השלט של הטלוויזיה אל השלט החכם ולחץ על ווליום או ערוץ.") {
                 Pulse()
                 TextButton(onClick = { scope.launch { Api.cancelLearn() }; onDone() }) { Text("אין לי טלוויזיה / דלג") }
             }

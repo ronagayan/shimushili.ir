@@ -50,7 +50,7 @@
 #include "tv_codes.h"
 #include "web_assets.h"
 
-#define FW_VERSION "1.3.1"
+#define FW_VERSION "1.3.2"
 #define HOSTNAME   "irblaster"
 #define AP_NAME    "IR_WIFI"
 #define MAX_CUSTOM 60
@@ -588,10 +588,40 @@ String scanRxPins() {
   return o + "]";
 }
 
-void testTxPin(int pin) {
+// Find the IR LED pin by itself: try each candidate pin and listen with our own
+// receiver (works when the light bounces back, e.g. off a hand in front of the box).
+const uint8_t TX_CANDIDATES[] = {4, 2, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33};
+int autoFindTx() {
+  if (learnMode != L_IDLE) return -1;
+  for (uint8_t p : TX_CANDIDATES) {
+    if (p == rxPin) continue;
+    while (irrecv->decode(&results)) irrecv->resume();
+    IRsend t(p);
+    t.begin();
+    bool hit = false;
+    for (int i = 0; i < 2 && !hit; i++) {
+      t.sendNEC(0x20DF10EF, 32);
+      uint32_t t0 = millis();
+      while (millis() - t0 < 200) {
+        if (irrecv->decode(&results)) {
+          hit = results.decode_type == decode_type_t::NEC && results.value == 0x20DF10EF;
+          irrecv->resume();
+          if (hit) break;
+        }
+        delay(2);
+      }
+    }
+    if (p != txPin) pinMode(p, INPUT);
+    if (hit) { irsend->begin(); return p; }
+  }
+  irsend->begin();
+  return -1;
+}
+
+void testTxPin(int pin, int bursts) {
   IRsend t(pin);
   t.begin();
-  for (int i = 0; i < 8; i++) {  // ~2s of bursts: visible through a phone camera
+  for (int i = 0; i < bursts; i++) {  // bursts visible through a phone camera
     t.sendNEC(0x20DF10EF, 32, 3);
     delay(150);
   }
@@ -620,7 +650,7 @@ String stateJson() {
   s += ",\"portal\":" + String(portalMode ? "true" : "false");
   s += ",\"admin\":" + String(adminPass.length() ? "true" : "false");
   s += ",\"fs\":" + String(fsOk ? "true" : "false");
-  s += ",\"tx\":" + String(txPin) + ",\"rx\":" + String(rxPin);
+  s += ",\"tx\":" + String(txPin) + ",\"rx\":" + String(rxPin) + ",\"fw\":\"" FW_VERSION "\"";
   s += ",\"ac\":" + acJson();
   s += ",\"tv\":{\"set\":" + String(tvSet) + ",\"brands\":[";
   for (int i = 0; i < TV_NBRANDS; i++) s += String(i ? "," : "") + "\"" + TV_BRAND_NAMES[i] + "\"";
@@ -1066,8 +1096,11 @@ void setupRoutes() {
     if (!guardAdmin()) return;
     int p = server.arg("pin").toInt();
     if (p < 0 || p > 33 || p == 1 || p == 3 || (p >= 6 && p <= 11)) { sendErr("פין לא תקין"); return; }
-    testTxPin(p);
+    testTxPin(p, server.hasArg("n") ? constrain((int)server.arg("n").toInt(), 1, 40) : 8);
     sendJson("{\"ok\":true}");
+  });
+  server.on("/api/admin/test/txauto", HTTP_GET, []() {
+    if (guardAdmin()) sendJson("{\"ok\":true,\"pin\":" + String(autoFindTx()) + "}");
   });
   server.on("/api/admin/test/rx", HTTP_GET, []() { if (guardAdmin()) sendJson("{\"ok\":true,\"pins\":" + scanRxPins() + "}"); });
   server.on("/api/admin/password", HTTP_POST, []() {

@@ -96,8 +96,11 @@ object Api {
 
     suspend fun call(path: String): JSONObject = JSONObject(callText(path))
 
-    suspend fun raw(path: String, base: String, network: Network? = null, form: String? = null): String =
-        request(path, base, network, form)
+    suspend fun raw(path: String, base: String, network: Network? = null, form: String? = null, timeoutMs: Int = 5000): String =
+        request(path, base, network, form, timeoutMs)
+
+    /** Saved device with a longer timeout (for slow admin actions like the RX pin scan). */
+    suspend fun slow(path: String, timeoutMs: Int): JSONObject = JSONObject(request(path, Device.baseUrl, null, null, timeoutMs))
 
     /** Start learning and wait until the device reports a result. */
     suspend fun learn(query: String): Pair<String, String> {
@@ -189,6 +192,18 @@ object ApLink {
         }
     }
 
+    /** User joined IR_WIFI by hand: find that WiFi network (the device answers on it). */
+    suspend fun findManual(ctx: Context): Network? {
+        val cm = ctx.getSystemService(ConnectivityManager::class.java)
+        @Suppress("DEPRECATION")
+        for (n in cm.allNetworks) {
+            val caps = cm.getNetworkCapabilities(n) ?: continue
+            if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue
+            if (runCatching { Api.raw("/api/conn", "http://192.168.4.1", n, timeoutMs = 2500) }.isSuccess) return n
+        }
+        return null
+    }
+
     fun release(ctx: Context) {
         val cb = callback ?: return
         callback = null
@@ -220,7 +235,7 @@ data class TvInfo(val set: Int, val brands: List<String>, val sets: List<Pair<In
     }
 }
 
-data class DevState(val version: String, val ip: String, val ac: AcState, val tv: TvInfo, val custom: List<CustomBtn>)
+data class DevState(val version: String, val ip: String, val ac: AcState, val tv: TvInfo, val custom: List<CustomBtn>, val tx: Int = -1, val rx: Int = -1)
 
 val TV_KEYS = listOf("power", "vol_up", "vol_down", "mute", "ch_up", "ch_down", "input", "up", "down", "left", "right", "ok", "back", "home")
 
@@ -238,5 +253,5 @@ fun parseState(j: JSONObject): DevState {
     val custom = j.getJSONArray("custom").let { arr ->
         List(arr.length()) { arr.getJSONObject(it).let { c -> CustomBtn(c.getInt("id"), c.optString("g", "tv"), c.getString("name")) } }
     }
-    return DevState(j.optString("v"), j.optString("ip"), parseAc(j.getJSONObject("ac")), TvInfo(tv.optInt("set", -1), brands, sets, learned), custom)
+    return DevState(j.optString("v"), j.optString("ip"), parseAc(j.getJSONObject("ac")), TvInfo(tv.optInt("set", -1), brands, sets, learned), custom, j.optInt("tx", -1), j.optInt("rx", -1))
 }

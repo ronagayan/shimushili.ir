@@ -21,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,6 +47,8 @@ fun MainScreen(initialSetup: String?) {
             "learn_tv" -> { RemoteHome({}, {}); LearnDialog("לימוד שלט הטלוויזיה", tvLearnAll()) { screen = "remote" } }
             "tile" -> TileStep { screen = "remote" }
             "ac_search" -> AcModelSearch({ screen = "remote" }, { screen = "settings" })
+            "hardware" -> HardwareWizard { screen = "settings" }
+            "firmware" -> FirmwareScreen { screen = "settings" }
             "settings" -> SettingsScreen(onBack = { screen = "remote" }, onNav = { screen = it })
             else -> RemoteHome(onSettings = { screen = "settings" }, onSetup = { screen = "setup_$it" })
         }
@@ -73,6 +76,8 @@ fun SettingsScreen(onBack: () -> Unit, onNav: (String) -> Unit) {
     val m = rememberRemoteModel()
     LaunchedEffect(Unit) { m.refresh() }
     var confirmReset by remember { mutableStateOf(false) }
+    var confirmWifi by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "חזרה") }
@@ -94,10 +99,31 @@ fun SettingsScreen(onBack: () -> Unit, onNav: (String) -> Unit) {
         WideButton("הוספה למרכז הבקרה", primary = false) {
             if (Build.VERSION.SDK_INT >= 33) requestTile(ctx) else onNav("tile")
         }
-        WideButton("הגדרות מתקדמות (בדפדפן)", primary = false) {
-            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Device.baseUrl + "/")))
-        }
+        WideButton("עדכון קושחה של השלט", primary = false) { onNav("firmware") }
+        WideButton("בדיקת חומרה (פינים)", primary = false) { onNav("hardware") }
+        WideButton("חיבור השלט לרשת אחרת", primary = false) { confirmWifi = true }
         WideButton("חיבור שלט חדש / התקנה מחדש", primary = false) { confirmReset = true }
+        TextButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Device.baseUrl + "/"))) }) {
+            Text("דף המכשיר (מתקדם)")
+        }
+    }
+    if (confirmWifi) {
+        AlertDialog(
+            onDismissRequest = { confirmWifi = false },
+            title = { Text("לחבר את השלט לרשת אחרת?") },
+            text = { Text("השלט יתנתק מהרשת הנוכחית ויפתח שוב את IR_WIFI, ואז נעבור על חיבור לרשת החדשה.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmWifi = false
+                    scope.launch {
+                        runCatching { Api.call("/api/admin/wifireset") }
+                        Device.forget()
+                        onNav("onboard")
+                    }
+                }) { Text("כן") }
+            },
+            dismissButton = { TextButton(onClick = { confirmWifi = false }) { Text("ביטול") } },
+        )
     }
     if (confirmReset) {
         AlertDialog(
@@ -108,4 +134,12 @@ fun SettingsScreen(onBack: () -> Unit, onNav: (String) -> Unit) {
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("ביטול") } },
         )
     }
+}
+
+@Composable
+fun FirmwareScreen(onDone: () -> Unit) {
+    var current by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { current = runCatching { parseState(Api.call("/api/state")).version }.getOrElse { "" } }
+    val c = current
+    if (c == null) StepScreen("🔄", "טוען…", "") { CircularProgressIndicator() } else FirmwareUpdate(c, onDone)
 }
