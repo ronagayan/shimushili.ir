@@ -7,3 +7,5 @@ android/local.properties
 keys/
 !android/keystore/dev.jks
 firmware/build/
+hardware/tools/board.pkl
+hardware/tools/__pycache__/

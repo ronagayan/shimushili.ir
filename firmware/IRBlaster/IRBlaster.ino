@@ -50,7 +50,7 @@
 #include "tv_codes.h"
 #include "web_assets.h"
 
-#define FW_VERSION "1.4.0"
+#define FW_VERSION "1.4.1"
 #define HOSTNAME   "irblaster"
 #define AP_NAME    "IR_WIFI"
 #define MAX_CUSTOM 60
@@ -63,8 +63,11 @@
 // The app's hardware check finds the real pins automatically.
 #if CONFIG_IDF_TARGET_ESP32S3
 #define CHIP_ID "esp32s3"
-#define DEFAULT_TX_PIN 4
+// Shimushili IR board v0.1 (hardware/ in the repo): IR LEDs on GPIO12, receiver on GPIO5,
+// status LED on GPIO1.
+#define DEFAULT_TX_PIN 12
 #define DEFAULT_RX_PIN 5
+#define STATUS_LED_PIN 1
 #define MAX_GPIO 48
 // Usable GPIOs (skips 19/20 USB, 26-34 flash, 35-37 octal PSRAM, 0/3/45/46 strapping).
 const uint8_t SCAN_PINS[] = {1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48};
@@ -262,7 +265,18 @@ bool sendKelon168() {
   return true;
 }
 
+// ---------------------------------------------------------------- status LED (S3 board)
+uint32_t ledFlashUntil = 0;
+void flashLed() { ledFlashUntil = millis() + 80; }
+void updateLed() {
+#ifdef STATUS_LED_PIN
+  bool on = portalMode ? ((millis() / 400) % 2) : (int32_t)(millis() - ledFlashUntil) < 0;
+  digitalWrite(STATUS_LED_PIN, on);
+#endif
+}
+
 bool sendAc() {
+  flashLed();
   if (acState.protocol == decode_type_t::KELON168) return sendKelon168();
   if (!IRac::isProtocolSupported(acState.protocol)) return false;
   bool ok = irac->sendAc(acState, acPrevValid ? &acPrev : nullptr);
@@ -314,6 +328,7 @@ bool saveResult(const String &path, const decode_results &r) {
 }
 
 bool sendCodeFile(const String &path) {
+  flashLed();
   if (!fsOk) return false;
   File f = LittleFS.open(path, "r");
   if (!f) return false;
@@ -455,6 +470,7 @@ bool sendTvSetKey(int s, int k) {
 }
 
 bool sendTvKey(const String &key) {
+  flashLed();
   String p = "/t_" + key + ".bin";
   if (fsOk && LittleFS.exists(p)) return sendCodeFile(p);  // learned overrides the code set
   return sendTvSetKey(tvSet, tvKeyIndex(key));
@@ -1188,6 +1204,9 @@ void setup() {
   delay(100);
   Serial.println("\nIRBlaster " FW_VERSION);
 
+#ifdef STATUS_LED_PIN
+  pinMode(STATUS_LED_PIN, OUTPUT);
+#endif
   prefs.begin("irb", false);
   txPin = prefs.getInt("tx", DEFAULT_TX_PIN);
   rxPin = prefs.getInt("rx", DEFAULT_RX_PIN);
@@ -1280,5 +1299,6 @@ void loop() {
     else if ((millis() - lostSince) % 30000 < 2) WiFi.reconnect();
   }
   handleLearning();
+  updateLed();
   delay(1);
 }
