@@ -45,6 +45,7 @@ fun MainScreen(initialSetup: String?) {
             "setup_tv" -> TvSetup { screen = "remote" }
             "learn_tv" -> { RemoteHome({}, {}); LearnDialog("לימוד שלט הטלוויזיה", tvLearnAll()) { screen = "remote" } }
             "tile" -> TileStep { screen = "remote" }
+            "ac_search" -> AcModelSearch({ screen = "remote" }, { screen = "settings" })
             "settings" -> SettingsScreen(onBack = { screen = "remote" }, onNav = { screen = it })
             else -> RemoteHome(onSettings = { screen = "settings" }, onSetup = { screen = "setup_$it" })
         }
@@ -86,6 +87,7 @@ fun SettingsScreen(onBack: () -> Unit, onNav: (String) -> Unit) {
             }
         }
         WideButton("הגדרת מזגן מחדש", primary = false) { onNav("setup_ac") }
+        WideButton("חיפוש מזגן לפי דגם", primary = false) { onNav("ac_search") }
         WideButton("הגדרת טלוויזיה מחדש", primary = false) { onNav("setup_tv") }
         WideButton("לימוד כל שלט הטלוויזיה", primary = false) { onNav("learn_tv") }
         WideButton("הוספה למרכז הבקרה", primary = false) {

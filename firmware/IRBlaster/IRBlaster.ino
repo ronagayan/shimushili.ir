@@ -50,7 +50,7 @@
 #include "tv_codes.h"
 #include "web_assets.h"
 
-#define FW_VERSION "1.3.0"
+#define FW_VERSION "1.3.1"
 #define HOSTNAME   "irblaster"
 #define AP_NAME    "IR_WIFI"
 #define MAX_CUSTOM 60
@@ -192,14 +192,31 @@ bool acSupported(decode_type_t p) { return IRac::isProtocolSupported(p) || p == 
 // Electra / Tadiran / Kelon units sold in Israel use KELON168, which IRac
 // doesn't drive. Power on those is a toggle, so we track the last state and
 // force "on" with a Super/Turbo frame (turns the unit on), then send the state.
+// Start from the frame captured from the customer's own remote (keeps its
+// model/fixed bits), clearing one-shot flags; fall back to library defaults.
+void kelonBase(IRKelon168Ac &k, bool on) {
+  uint8_t tpl[kKelon168StateLength];
+  if (prefs.getBytes("k168", tpl, sizeof(tpl)) == sizeof(tpl)) {
+    tpl[2] &= ~0x04;               // no power-toggle request
+    if (on) tpl[18] |= 0x10; else tpl[18] &= ~0x10;  // "unit is on" flag
+    k.setRaw(tpl);
+    k.setSuper(false);
+    k.setSleep(false);
+    k.enableOnTimer(false);
+    k.enableOffTimer(false);
+  } else {
+    k.stateReset();
+  }
+}
+
 bool sendKelon168() {
   IRKelon168Ac k(txPin);
   k.begin();
-  k.stateReset();
+  kelonBase(k, acState.power);
   k.setMode(IRKelon168Ac::convertMode(acState.mode));
-  k.setTemp((uint8_t)acState.degrees);
   k.setFan(IRKelon168Ac::convertFan(acState.fanspeed));
   k.setSwing(acState.swingv != stdAc::swingv_t::kOff);
+  k.setTemp((uint8_t)acState.degrees);  // last, so the frame's command is "temperature" (harmless)
   if (!acState.power) {
     if (lastPower) { k.setPower(false); k.send(); }
   } else {
@@ -209,8 +226,8 @@ bool sendKelon168() {
       delay(400);
       k.setSuper(false);
       k.setMode(IRKelon168Ac::convertMode(acState.mode));
-      k.setTemp((uint8_t)acState.degrees);
       k.setFan(IRKelon168Ac::convertFan(acState.fanspeed));
+      k.setTemp((uint8_t)acState.degrees);
     }
     k.send();
   }
@@ -481,6 +498,7 @@ void handleLearning() {
       if (t == decode_type_t::KELON168) {
         IRKelon168Ac k(txPin);
         k.setRaw(results.state);
+        prefs.putBytes("k168", results.state, kKelon168StateLength);  // template for our own frames
         s = k.toCommon();
         s.protocol = t;
         lastPower = s.power;
@@ -767,6 +785,8 @@ void handleSettings() {
   if (server.hasArg("acproto")) {
     acState.protocol = (decode_type_t)server.arg("acproto").toInt();
     acState.model = server.hasArg("acmodel") ? (int16_t)server.arg("acmodel").toInt() : -1;
+    if (server.hasArg("acmodelname"))  // e.g. "YAW1F" from the model search
+      acState.model = IRac::strToModel(server.arg("acmodelname").c_str(), -1);
     acPrevValid = false;
     saveAc();
   }

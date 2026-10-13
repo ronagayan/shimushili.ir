@@ -202,19 +202,20 @@ fun AcSetup(onDone: () -> Unit) {
         "test" -> StepScreen("✅", "המזגן זוהה", "שלחנו פקודת הפעלה (קירור 24°). המזגן נדלק?") {
             LaunchedEffect(Unit) { runCatching { Api.call("/api/ac?power=on&mode=cool&temp=24") } }
             WideButton("כן, נדלק") { onDone() }
-            WideButton("לא", primary = false) { phase = "brands" }
+            WideButton("לא", primary = false) { msg = "המזגן זוהה אבל לא הגיב. נסה חיפוש לפי הדגם שכתוב על השלט."; phase = "fail" }
         }
         "fail" -> StepScreen("⚠️", "לא זוהה אוטומטית", msg) {
             WideButton("נסה שוב") { attempt++; phase = "detect" }
+            WideButton("חיפוש לפי דגם השלט / המזגן", primary = false) { phase = "search" }
             WideButton("בחירת מותג מרשימה", primary = false) { phase = "brands" }
             WideButton("למד מצבים קבועים מהשלט", primary = false) { phase = "scenes" }
             TextButton(onClick = onDone) { Text("דלג") }
         }
         "scenes" -> {
             StepScreen("❄️", "לימוד מצבי מזגן", "") {}
-            val scenes = listOf("מזגן כיבוי" to "כבה את המזגן בשלט", "קירור 24" to "קירור, 24°", "קירור 22" to "קירור, 22°", "חימום 26" to "חימום, 26°")
-            LearnDialog("מצבי מזגן", scenes.map { (n, h) -> LearnItem(n, "type=custom&g=ac&name=${enc(n)}", "כוון את השלט ל: $h, ולחץ על הכפתור האחרון.") }) { onDone() }
+            LearnDialog("מצבי מזגן", acScenes()) { onDone() }
         }
+        "search" -> AcModelSearch(onDone) { phase = "fail" }
         else -> AcBrandPicker(onDone) { phase = "fail" }
     }
 }
