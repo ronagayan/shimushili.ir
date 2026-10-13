@@ -16,11 +16,21 @@ android {
         versionName = "0.1." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
     }
 
+    // Same key on every build, so new versions install over old ones.
+    // keystore/dev.jks is for testing; before selling, set ANDROID_KEYSTORE_* to a private key.
+    signingConfigs {
+        create("app") {
+            storeFile = file(System.getenv("ANDROID_KEYSTORE_FILE") ?: "../keystore/dev.jks")
+            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "shimushili-dev"
+            keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: "dev"
+            keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "shimushili-dev"
+        }
+    }
     buildTypes {
+        debug { signingConfig = signingConfigs.getByName("app") }
         release {
-            isMinifyEnabled = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            signingConfig = signingConfigs.getByName("debug")  // TODO: real release key before Google Play
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("app")
         }
     }
     compileOptions {

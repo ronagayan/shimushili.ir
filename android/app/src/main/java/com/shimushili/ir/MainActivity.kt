@@ -61,6 +61,7 @@ fun RemoteHome(onSettings: () -> Unit, onSetup: (String) -> Unit) {
             Text("שלט חכם", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
             IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, contentDescription = "הגדרות") }
         }
+        UpdateBanner()
         RemotePanel(m, onSetup)
         Spacer(Modifier.height(24.dp))
     }

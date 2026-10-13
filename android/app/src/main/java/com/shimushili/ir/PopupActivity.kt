@@ -40,18 +40,20 @@ class PopupActivity : ComponentActivity() {
                 val m = rememberRemoteModel()
                 LaunchedEffect(Unit) { if (Device.configured) m.refresh() }
                 Box(
-                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f))
+                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f))
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { finish() },
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                        tonalElevation = 3.dp,
-                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 760.dp)
+                        shape = RoundedCornerShape(28.dp),
+                        tonalElevation = 6.dp,
+                        shadowElevation = 12.dp,
+                        modifier = Modifier.align(Alignment.Center).padding(horizontal = 14.dp)
+                            .widthIn(max = 460.dp).fillMaxWidth().heightIn(max = 640.dp)
                             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {},
                     ) {
-                        Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(16.dp)) {
+                        Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("שלט", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                                Text("שלט", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                                 IconButton(onClick = { openApp(null) }) { Icon(Icons.Filled.Settings, "הגדרות") }
                                 IconButton(onClick = { finish() }) { Icon(Icons.Filled.Close, "סגור") }
                             }

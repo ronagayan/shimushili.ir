@@ -23,9 +23,11 @@ jobs:
           gradle-version: "8.9"
       - name: Build APK
         working-directory: android
-        run: gradle assembleDebug --stacktrace
-      - name: Rename APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk shimushili-remote.apk
+        run: gradle assembleRelease --stacktrace
+      - name: Rename APK + version file
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk shimushili-remote.apk
+          echo "{\"versionCode\": ${GITHUB_RUN_NUMBER}}" > version.json
       - uses: actions/upload-artifact@v4
         with:
           name: shimushili-remote
@@ -37,7 +39,9 @@ jobs:
           name: אפליקציית שלט – גרסה אחרונה
           prerelease: true
           make_latest: false
-          files: shimushili-remote.apk
+          files: |
+            shimushili-remote.apk
+            version.json
           body: |
             הורדה ישירה לטלפון: https://github.com/${{ github.repository }}/releases/download/android-latest/shimushili-remote.apk
             נבנה מ-${{ github.sha }}

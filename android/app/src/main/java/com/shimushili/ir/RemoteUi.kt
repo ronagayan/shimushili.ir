@@ -15,6 +15,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -93,17 +95,32 @@ fun rememberRemoteModel(): RemoteModel {
 }
 
 // ---------------------------------------------------------------- remote
+/** AC and TV remotes side by side: swipe left/right (or tap the switch) to change. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RemotePanel(m: RemoteModel, onSetup: (String) -> Unit) {
     val st = m.state
-    var tab by remember { mutableStateOf(Device.lastTab) }
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        TabSwitch(tab) { tab = it; Device.lastTab = it }
+    val pager = rememberPagerState(initialPage = if (Device.lastTab == "tv") 1 else 0) { 2 }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(pager.currentPage) { Device.lastTab = if (pager.currentPage == 1) "tv" else "ac" }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        TabSwitch(if (pager.currentPage == 1) "tv" else "ac") { t -> scope.launch { pager.animateScrollToPage(if (t == "tv") 1 else 0) } }
         when {
             st == null && m.error != null -> ErrorBox(m.error ?: "") { m.refresh() }
             st == null -> Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            tab == "ac" -> AcPanel(m, st, onSetup)
-            else -> TvPanel(m, st, onSetup)
+            else -> HorizontalPager(state = pager, verticalAlignment = Alignment.Top, pageSpacing = 16.dp) { page ->
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (page == 0) AcPanel(m, st, onSetup) else TvPanel(m, st, onSetup)
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            repeat(2) { i ->
+                Box(
+                    Modifier.padding(3.dp).size(if (pager.currentPage == i) 8.dp else 6.dp).clip(CircleShape)
+                        .background(if (pager.currentPage == i) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                )
+            }
         }
     }
 }

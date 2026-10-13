@@ -5,4 +5,5 @@ android/local.properties
 *.iml
 .idea/
 keys/
+!android/keystore/dev.jks
 firmware/build/
