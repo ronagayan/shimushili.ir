@@ -1,0 +1,28 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>הגדרת השלט</title>
+<style>body{font:16px system-ui,Arial;max-width:420px;margin:24px auto;padding:0 16px;background:#f1f5f9;color:#0f172a}
+.c{background:#fff;border-radius:18px;padding:20px}h2{margin:0 0 12px}input,button{width:100%;box-sizing:border-box;padding:14px;border-radius:12px;font:inherit;margin-top:10px;border:1px solid #cbd5e1}
+button{background:#0284c7;color:#fff;border:0;font-weight:600}button.s{background:#e0f2fe;color:#0f172a}
+.n{padding:12px 4px;border-bottom:1px solid #e2e8f0;cursor:pointer}.n span{float:left;color:#64748b;font-size:13px}
+.m{font-size:13px;color:#64748b}.e{color:#dc2626}.ip{font:700 24px monospace;direction:ltr;text-align:center;background:#f1f5f9;border-radius:12px;padding:14px;margin:8px 0}
+.sp{width:44px;height:44px;border:5px solid #e0f2fe;border-top-color:#0284c7;border-radius:50%;margin:10px auto 16px;animation:r 1s linear infinite}@keyframes r{to{transform:rotate(360deg)}}
+a{color:#0284c7}</style></head><body>
+<div class="c" id="s1"><h2>📡 חיבור השלט לרשת הביתית</h2><p class="e" id="er" hidden></p><div id="l">סורק רשתות…</div>
+<input id="s" placeholder="שם רשת"><input id="p" type="password" placeholder="סיסמה"><button onclick="go()">התחבר</button>
+<p class="m"><a href="/app">דלג – שליטה ישירה דרך IR_WIFI בלי רשת ביתית</a></p></div>
+<div class="c" id="s2" hidden><div class="sp"></div><h2 style="text-align:center">מתחבר…</h2><p class="m" style="text-align:center">כמה שניות. אם הטלפון מתנתק לרגע מ-IR_WIFI זה תקין.</p></div>
+<div class="c" id="s3" hidden><h2>✅ השלט מחובר!</h2><p>הכתובת של השלט שלך:</p><div class="ip" id="ip"></div><div class="ip" style="font-size:17px">irblaster.local</div>
+<button class="s" onclick="cp()">העתק כתובת</button><button onclick="fin()">סיום ופתיחת השלט</button>
+<p class="m" id="fm">בלחיצה על סיום הרשת IR_WIFI נסגרת, הטלפון חוזר לרשת הביתית והשלט נפתח. אם הוא לא נפתח לבד, פתח את הכתובת בדפדפן.</p></div>
+<script>let ip='',t=null;const $=i=>document.getElementById(i);
+fetch('/scan').then(r=>r.json()).then(a=>{const l=$('l');l.innerHTML='';if(!a.length)l.textContent='לא נמצאו רשתות';
+a.forEach(n=>{const d=document.createElement('div');d.className='n';d.textContent=n.s;const sp=document.createElement('span');sp.textContent=n.r+'dBm';d.appendChild(sp);
+d.onclick=()=>{$('s').value=n.s;$('p').focus()};l.appendChild(d)})}).catch(()=>$('l').textContent='');
+function show(n){['s1','s2','s3'].forEach(i=>$(i).hidden=i!==n)}
+function go(){const s=$('s').value.trim();if(!s)return;show('s2');
+fetch('/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'s='+encodeURIComponent(s)+'&p='+encodeURIComponent($('p').value)}).catch(()=>{});
+clearInterval(t);t=setInterval(()=>fetch('/api/conn').then(r=>r.json()).then(j=>{if(j.s==='ok'){clearInterval(t);ip=j.ip;$('ip').textContent=ip;show('s3')}
+else if(j.s==='fail'){clearInterval(t);$('er').textContent='לא הצלחתי להתחבר. בדוק את הסיסמה ונסה שוב.';$('er').hidden=false;show('s1')}}).catch(()=>{}),1200)}
+function cp(){const a=document.createElement('textarea');a.value='http://'+ip;document.body.appendChild(a);a.select();try{document.execCommand('copy')}catch(e){}a.remove();$('fm').textContent='הכתובת הועתקה ✓'}
+function fin(){fetch('/api/finish').catch(()=>{});$('fm').textContent='עובר לרשת הביתית…';setTimeout(()=>location.href='http://'+ip+'/?tab=quick',6000)}
+</script></body></html>

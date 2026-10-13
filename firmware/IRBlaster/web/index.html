@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f172a"><title>שלט חכם</title>
+<link rel="manifest" href="/manifest.json"><link rel="apple-touch-icon" href="/icon.png"><link rel="icon" href="/icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="שלט"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+:root{--bg:#f1f5f9;--card:#fff;--tx:#0f172a;--mut:#64748b;--ln:#e2e8f0;--ac:#0284c7;--acs:#e0f2fe;--on:#16a34a;--off:#dc2626;--hot:#ea580c}
+@media(prefers-color-scheme:dark){:root{--bg:#0b1220;--card:#131c2e;--tx:#e2e8f0;--mut:#94a3b8;--ln:#24324a;--ac:#38bdf8;--acs:#0c2a3d;--on:#22c55e;--off:#ef4444;--hot:#fb923c}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;padding:0 16px 90px}
+header{padding:18px 2px 10px}h1{font-size:22px;margin:0}.sub{color:var(--mut);font-size:13px}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:18px;padding:16px;margin:12px 0}
+.card h2{font-size:15px;margin:0 0 12px;color:var(--mut);font-weight:600}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--ln);padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+nav button{flex:1;background:none;border:0;color:var(--mut);font:inherit;font-size:12px;padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button span{font-size:20px}nav button.act{color:var(--ac);font-weight:600}
+.page{display:none}.page.act{display:block}
+button.b{background:var(--acs);color:var(--tx);border:1px solid var(--ln);border-radius:14px;font:inherit;padding:12px;cursor:pointer;min-height:48px;transition:transform .08s}
+button.b:active{transform:scale(.95)}button.p{background:var(--ac);color:#fff;border-color:var(--ac);font-weight:600}
+button.w{width:100%;margin-top:10px}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--ln);background:var(--card);color:var(--tx);border-radius:999px;padding:9px 14px;font:inherit;font-size:14px}
+.chip.sel{background:var(--ac);color:#fff;border-color:var(--ac)}
+.temp{display:flex;align-items:center;justify-content:center;gap:22px;margin:6px 0 14px}
+.temp .v{font-size:64px;font-weight:700;min-width:120px;text-align:center;font-variant-numeric:tabular-nums}
+.temp .v small{font-size:24px;color:var(--mut)}
+.round{width:58px;height:58px;border-radius:50%;font-size:28px;padding:0}
+.pwr{width:100%;font-size:18px;font-weight:600}
+.pwr.on{background:var(--on);color:#fff;border-color:var(--on)}.pwr.off{background:var(--off);color:#fff;border-color:var(--off)}
+.lbl{font-size:13px;color:var(--mut);margin:12px 0 6px}
+.remote{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.remote .b{font-size:15px}.remote .k-power{background:var(--off);color:#fff;border-color:var(--off)}
+.remote .learned{outline:2px solid var(--on)}.remote .na{opacity:.45}
+.learnon .remote .b{outline:2px dashed var(--hot)}
+.dpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0}
+select,input{width:100%;font:inherit;padding:11px;border-radius:12px;border:1px solid var(--ln);background:var(--card);color:var(--tx)}
+.note{font-size:13px;color:var(--mut);margin:8px 0 0}
+.warn{background:#fef3c7;color:#78350f;border-radius:12px;padding:10px;font-size:14px;margin-bottom:10px}
+@media(prefers-color-scheme:dark){.warn{background:#3a2a07;color:#fde68a}}
+.list{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.list .wrap{position:relative}.list .b{width:100%}
+.del{position:absolute;top:-6px;left:-6px;width:26px;height:26px;border-radius:50%;border:0;background:var(--off);color:#fff;display:none}
+.editing .del{display:block}
+#modal{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;padding:20px;z-index:9}
+#modal>.card{max-width:380px;width:100%;text-align:center;max-height:90vh;overflow:auto}
+#mbody .b{width:100%;margin-top:8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.grid .b{margin:0!important}
+.pulse{width:64px;height:64px;border-radius:50%;background:var(--ac);margin:10px auto 16px;animation:p 1.2s infinite}
+@keyframes p{0%{transform:scale(.8);opacity:1}100%{transform:scale(1.3);opacity:.2}}
+.prog{height:6px;background:var(--ln);border-radius:3px;overflow:hidden;margin:10px 0}.prog i{display:block;height:100%;background:var(--ac)}
+.keyname{font-size:30px;font-weight:700;margin:6px 0}
+#toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:14px;opacity:0;transition:.25s;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1}
+.big{display:block;text-align:center;text-decoration:none;background:var(--ac);color:#fff;border-radius:14px;padding:14px;font-weight:600;margin:10px 0}
+.steps{margin:8px 0 0;padding-inline-start:20px}.steps li{margin:6px 0}
+.addr{font:700 18px ui-monospace,monospace;direction:ltr;text-align:center;background:var(--bg);border-radius:12px;padding:10px;margin:6px 0}
+.url{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--ln)}.url span{flex:1}.url .chip{flex:none;padding:6px 12px}
+.sw{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tvhead{display:flex;align-items:center;gap:10px}.tvhead div{flex:1}.tvhead b{font-size:18px}
+</style></head><body>
+<header><h1>שלט חכם</h1><div class="sub" id="sub">מתחבר…</div></header>
+
+<section class="page act" id="p-ac">
+ <div class="card">
+  <div class="warn" id="acwarn" hidden>עוד לא הוגדר מזגן. <a href="#" onclick="acSetup();return false">הגדר עכשיו ←</a></div>
+  <button class="b pwr off" id="acpwr" onclick="ac({power:'toggle'})">כבוי</button>
+  <div class="temp"><button class="b round" onclick="tmp(1)">+</button>
+   <div class="v"><span id="t">24</span><small>°C</small></div>
+   <button class="b round" onclick="tmp(-1)">−</button></div>
+  <div class="lbl">מצב</div><div class="chips" id="modes"></div>
+  <div class="lbl">מאוורר</div><div class="chips" id="fans"></div>
+  <div class="lbl">נדנוד</div><div class="chips" id="swing"></div>
+  <p class="note" id="acproto"></p>
+ </div>
+ <div class="card"><h2>כפתורים נוספים למזגן</h2><div class="list" id="cust-ac"></div>
+  <div class="row" style="margin-top:10px"><button class="b" onclick="newCustom('ac')">＋ הוסף כפתור</button><button class="b" onclick="acScenes()">למד מצבים</button></div>
+  <p class="note">לחיצה ארוכה על כפתור = מחיקה.</p></div>
+</section>
+
+<section class="page" id="p-tv">
+ <div class="card"><div class="tvhead"><div><div class="note" style="margin:0">טלוויזיה</div><b id="tvname">לא הוגדרה</b></div>
+  <button class="b p" onclick="tvSetup()">הגדרה</button></div></div>
+ <div class="card">
+  <div class="remote">
+   <button class="b" data-k="input">⎆ מקור</button><button class="b" data-k="mute">🔇 השתק</button><button class="b k-power" data-k="power">⏻ הפעלה</button>
+  </div>
+  <div class="dpad">
+   <button class="b" data-k="home">⌂ בית</button><button class="b" data-k="up">▲</button><button class="b" data-k="back">↩ חזרה</button>
+   <button class="b" data-k="right">▶</button><button class="b" data-k="ok">OK</button><button class="b" data-k="left">◀</button>
+   <span></span><button class="b" data-k="down">▼</button><span></span>
+  </div>
+  <div class="remote">
+   <button class="b" data-k="vol_up">🔊 ווליום +</button><span></span><button class="b" data-k="ch_up">ערוץ +</button>
+   <button class="b" data-k="vol_down">🔉 ווליום −</button><span></span><button class="b" data-k="ch_down">ערוץ −</button>
+  </div>
+  <div class="sw" style="margin-top:14px"><span class="note" style="margin:0">לימוד כפתור בודד (לחיצה = לימוד מהשלט)</span>
+   <input type="checkbox" id="tvlearn" style="width:24px;height:24px" onchange="document.body.classList.toggle('learnon',this.checked)"></div>
+  <p class="note">מסגרת ירוקה = נלמד מהשלט שלך. כפתור שקוף = אין לו קוד, אפשר ללמוד אותו.</p>
+ </div>
+ <div class="card"><h2>כפתורים נוספים לטלוויזיה</h2><div class="list" id="cust-tv"></div>
+  <button class="b w" onclick="newCustom('tv')">＋ הוסף כפתור (Netflix, YouTube, ממיר...)</button>
+  <p class="note">לחיצה ארוכה על כפתור = מחיקה.</p></div>
+</section>
+
+<section class="page" id="p-quick">
+ <div class="card"><h2>הכתובת של השלט</h2><div class="addr" id="qip"></div><div class="addr" style="font-size:15px">irblaster.local</div>
+  <p class="note">‏irblaster.local עובד באייפון ובמחשב. באנדרואיד השתמש בכתובת המספרית, ומומלץ לקבע אותה בראוטר (DHCP Reservation) כדי שהקיצורים לא יישברו.</p></div>
+ <div class="card" id="q-and"><h2>🤖 אנדרואיד – כפתורים במרכז הבקרה</h2>
+  <ol class="steps"><li>התקן את האפליקציה החינמית HTTP Shortcuts:<a class="big" href="https://play.google.com/store/apps/details?id=ch.rmy.android.http_shortcuts">פתח ב-Google Play</a></li>
+  <li>ייבא את כל הכפתורים בלחיצה אחת:<a class="big" id="qimp" href="#">📲 ייבא כפתורים לאנדרואיד</a></li>
+  <li>משוך למטה את מרכז הבקרה ← ✏️ עריכה ← גרור את האריח <b>HTTP Shortcuts</b>. לחיצה עליו פותחת תפריט עם כל הכפתורים.</li></ol>
+  <p class="note">למדת כפתורים חדשים? ייבא שוב והם יתווספו.</p></div>
+ <div class="card" id="q-ios"><h2>🍎 אייפון – שלט במרכז הבקרה</h2>
+  <ol class="steps"><li>הוסף את קיצור השלט בלחיצה אחת:<a class="big" id="qios" href="#">➕ הוסף קיצור "שלט" לאייפון</a><span class="note" id="qiosmissing" hidden>קישור הקיצור עוד לא הוגדר (הגדרות ← אייפון).</span></li>
+  <li>משוך את מרכז הבקרה ← ＋ ← הוסף פקד ← קיצורים ← בחר "שלט". לחיצה עליו פותחת תפריט עם כל הכפתורים של המזגן והטלוויזיה.</li>
+  <li><b>אפליקציה במסך הבית:</b> פתח את הדף הזה ב-Safari ← שתף ← "הוסף למסך הבית".</li></ol></div>
+ <div class="card"><h2>כתובות מוכנות</h2><div id="qurls"></div>
+  <p class="note">הכתובות כוללות מפתח אישי של המכשיר (k=…). אל תשתף אותן מחוץ לבית.</p></div>
+</section>
+
+<section class="page" id="p-set">
+ <div class="card"><h2>מזגן</h2>
+  <button class="b p" style="width:100%" onclick="learn1('ac')">🔍 זיהוי אוטומטי מהשלט של המזגן</button>
+  <div class="lbl">או בחר ידנית</div>
+  <select id="acproto_sel"></select>
+  <div class="lbl">מודל (השאר -1 אם לא ידוע)</div>
+  <input id="acmodel" type="number" value="-1">
+  <button class="b w" onclick="saveAcProto()">שמור מזגן</button>
+ </div>
+ <div class="card"><h2>🍎 קישור קיצור לאייפון</h2>
+  <input id="iosurl" placeholder="https://www.icloud.com/shortcuts/..." dir="ltr">
+  <button class="b w" onclick="saveIos()">שמור קישור</button>
+  <p class="note">מדביקים פעם אחת את קישור ה-iCloud של קיצור "שלט" המשותף. הוא עובד אצל כל לקוח בלי הגדרות.</p></div>
+ <div class="card"><h2>🔒 אבטחה</h2>
+  <p class="note" id="admstate"></p>
+  <input id="admpw" type="password" placeholder="סיסמת ניהול חדשה (לפחות 6 תווים)" autocomplete="new-password">
+  <button class="b w" onclick="savePw()">שמור סיסמה</button>
+  <p class="note">הסיסמה נדרשת לעדכון קושחה, שינוי פינים ואיפוס WiFi. שם משתמש: admin.</p>
+ </div>
+ <div class="card"><h2>פינים</h2>
+  <div class="row"><div><div class="lbl">שידור (IR LED)</div><input id="txp" type="number"></div>
+   <div><div class="lbl">קליטה (IR Receiver)</div><input id="rxp" type="number"></div></div>
+  <div class="row" style="margin-top:10px"><button class="b" onclick="testTx()">בדוק שידור</button><button class="b" onclick="scanRx()">סרוק קליטה</button></div>
+  <p class="note">בדיקת שידור: הסתכל על נורת ה-IR דרך מצלמת הטלפון (הקדמית עובדת הכי טוב), פין נכון = הבהובים סגולים. סריקת קליטה: לחץ ארוכות על כפתור בשלט כלשהו 6 שניות מול המכשיר.</p>
+  <p class="note" id="scanres"></p>
+  <button class="b w" onclick="savePins()">שמור פינים והפעל מחדש</button>
+ </div>
+ <div class="card"><h2>מערכת</h2>
+  <p class="note" id="sysinfo"></p>
+  <div class="row" style="margin-top:10px"><button class="b" onclick="location.href='/update'">עדכון קושחה</button>
+   <button class="b" onclick="if(confirm('לאפס הגדרות WiFi? המכשיר יפתח שוב את הרשת IR_WIFI'))api('/api/admin/wifireset')">איפוס WiFi</button></div>
+ </div>
+</section>
+
+<nav>
+ <button class="act" data-p="ac"><span>❄️</span>מזגן</button>
+ <button data-p="tv"><span>📺</span>טלוויזיה</button>
+ <button data-p="quick"><span>📲</span>קיצורים</button>
+ <button data-p="set"><span>⚙️</span>הגדרות</button>
+</nav>
+<div id="modal"><div class="card"><div class="pulse" id="mpulse"></div><h3 id="mtitle" style="margin:0 0 8px"></h3>
+ <div id="mmsg"></div><div id="mbody"></div><button class="b w" id="mclose" onclick="closeModal()">סגור</button></div></div>
+<div id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);let S=null,K='',tt=null,poll=null,wiz=null;
+const KEYS={power:'⏻ הפעלה/כיבוי',vol_up:'ווליום +',vol_down:'ווליום −',mute:'השתקה',ch_up:'ערוץ +',ch_down:'ערוץ −',input:'מקור / Source',up:'חץ למעלה ▲',down:'חץ למטה ▼',left:'חץ שמאלה ◀',right:'חץ ימינה ▶',ok:'OK',back:'חזרה',home:'בית / Home'};
+const MODES=[['cool','❄️ קירור'],['heat','🔥 חימום'],['auto','🔄 אוטו'],['dry','💧 ייבוש'],['fan','🌀 מאוורר']];
+const FANS=[['auto','אוטו'],['low','נמוך'],['medium','בינוני'],['high','גבוה']];
+const ACB=[['KELON168','Electra / Tadiran (ישראל)'],['ELECTRA_AC','Electra (שלט YKR)'],['KELON','Kelon / Hisense'],['AMCOR','Amcor'],['AIRWELL','Airwell'],['TCL112AC','TCL'],['GREE','Gree'],['MIDEA','Midea'],['COOLIX','Coolix (Midea ועוד)'],['SAMSUNG_AC','Samsung'],['LG','LG'],['HAIER_AC_YRW02','Haier'],['TOSHIBA_AC','Toshiba'],['MITSUBISHI_AC','Mitsubishi Electric'],['MITSUBISHI_HEAVY_152','Mitsubishi Heavy'],['FUJITSU_AC','Fujitsu'],['DAIKIN','Daikin'],['PANASONIC_AC','Panasonic'],['SHARP_AC','Sharp'],['HITACHI_AC','Hitachi'],['WHIRLPOOL_AC','Whirlpool'],['VESTEL_AC','Vestel'],['CARRIER_AC64','Carrier'],['YORK','York']];
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1800)}
+async function api(u){try{const r=await fetch(u,{headers:{'X-Key':K}});if(r.status===401){toast('נדרשת סיסמת ניהול');return null}
+ const j=await r.json();if(j.ok===false)toast(j.error||'שגיאה');return j}catch(e){toast('אין חיבור למכשיר');return null}}
+function el(tag,cls,txt,fn){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;if(fn)e.onclick=fn;return e}
+function chips(id,list,cur,fn){$(id).innerHTML='';list.forEach(([v,l])=>$(id).appendChild(el('button','chip'+(v===cur?' sel':''),l,()=>fn(v))))}
+// ---------- AC
+function renderAc(a){S.ac=a;$('acpwr').className='b pwr '+(a.power?'on':'off');$('acpwr').textContent=a.power?'⏻ דולק':'⏻ כבוי';
+ $('t').textContent=Math.round(a.temp);chips('modes',MODES,a.mode,v=>ac({mode:v,power:'on'}));chips('fans',FANS,a.fan,v=>ac({fan:v}));
+ chips('swing',[['on','פועל'],['off','כבוי']],a.swing?'on':'off',v=>ac({swing:v}));
+ $('acwarn').hidden=a.supported;$('acproto').textContent=a.proto?('פרוטוקול: '+a.proto+(a.model>0?' · מודל '+a.model:'')):''}
+async function ac(p){const j=await api('/api/ac?'+new URLSearchParams(p));if(j&&j.ac){renderAc(j.ac);if(j.ok)toast('נשלח')}}
+function tmp(d){if(!S)return;let v=Math.max(16,Math.min(30,Math.round(S.ac.temp)+d));S.ac.temp=v;$('t').textContent=v;clearTimeout(tt);tt=setTimeout(()=>ac({temp:v,power:'on'}),600)}
+function acSetup(){openModal('הגדרת מזגן','',false);const b=$('mbody');
+ b.append(el('p','note','הדרך הכי קלה: כוון את השלט של המזגן למכשיר ולחץ על כפתור.'),el('button','b p','🔍 זיהוי אוטומטי מהשלט',()=>learn1('ac')),
+  el('button','b','בחירת מותג ידנית',()=>{closeModal();nav('set')}),el('button','b','המזגן לא נתמך – למד מצבים',()=>{closeModal();acScenes()}))}
+// ---------- TV
+function tvSetName(i){if(i<0||!S.tv.sets[i])return null;const st=S.tv.sets[i],n=S.tv.sets.filter(x=>x[0]===st[0]),k=n.indexOf(st);
+ return S.tv.brands[st[0]]+(n.length>1?' (קוד '+(k+1)+')':'')}
+function renderTv(){const set=S.tv.sets[S.tv.set],mask=set?set[1]:0;$('tvname').textContent=tvSetName(S.tv.set)||(S.tv.learned.length?'שלט שנלמד':'לא הוגדרה');
+ document.querySelectorAll('[data-k]').forEach(b=>{const k=b.dataset.k,i=Object.keys(KEYS).indexOf(k),L=S.tv.learned.includes(k);
+  b.classList.toggle('learned',L);b.classList.toggle('na',!L&&!(mask>>i&1));
+  b.onclick=()=>{if($('tvlearn').checked)learnSeq([{type:'tvkey',key:k,label:KEYS[k]}],'לימוד כפתור');else api('/api/tv?key='+k).then(j=>j&&j.ok&&toast('נשלח'))}})}
+function tvSetup(){openModal('הגדרת טלוויזיה','',false);const b=$('mbody');
+ b.append(el('button','b p','🔍 זיהוי אוטומטי מהשלט',()=>learn1('tv')),el('p','note','כוון את השלט של הטלוויזיה ולחץ על כפתור. עובד לרוב הטלוויזיות.'),
+  el('button','b','בחירת מותג ובדיקה',tvBrands),el('button','b','לימוד כל הכפתורים מהשלט',tvLearnAll))}
+function tvBrands(){openModal('איזו טלוויזיה יש לך?','',false);const g=el('div','grid');
+ S.tv.brands.forEach((n,i)=>{if(S.tv.sets.some(s=>s[0]===i))g.appendChild(el('button','b',n,()=>tvTest(i,0)))});
+ $('mbody').append(g,el('button','b','המותג לא ברשימה – למד מהשלט',tvLearnAll))}
+function tvTest(brand,n){const idx=S.tv.sets.map((s,i)=>s[0]===brand?i:-1).filter(i=>i>=0);
+ if(n>=idx.length){openModal('אף קוד לא עבד','',false);$('mbody').append(el('p','note','אין בעיה – נלמד את הכפתורים ישירות מהשלט שלך.'),el('button','b p','לימוד מהשלט',tvLearnAll));return}
+ const si=idx[n];openModal(S.tv.brands[brand]+' – בדיקה '+(n+1)+' מתוך '+idx.length,'כוון את המכשיר לטלוויזיה ולחץ "שלח". הטלוויזיה אמורה להיכבות או להידלק.',false);
+ const b=$('mbody');b.append(el('button','b p','📡 שלח בדיקה',()=>api('/api/tv/test?set='+si).then(j=>j&&j.ok&&toast('נשלח'))),
+  el('button','b','✅ הטלוויזיה הגיבה',async()=>{await api('/api/settings?tvset='+si);closeModal();await load();toast('הטלוויזיה הוגדרה ✓')}),
+  el('button','b','❌ לא הגיבה – נסה קוד הבא',()=>tvTest(brand,n+1)))}
+function tvLearnAll(){learnSeq(Object.keys(KEYS).map(k=>({type:'tvkey',key:k,label:KEYS[k]})),'לימוד שלט הטלוויזיה')}
+// ---------- My buttons
+function renderCustom(){['ac','tv'].forEach(g=>{const l=$('cust-'+g);l.innerHTML='';const list=S.custom.filter(c=>c.g===g);
+ if(!list.length)l.appendChild(el('p','note','עדיין אין כפתורים.'));
+ list.forEach(c=>{const b=el('button','b',c.name,()=>{if(b._lp)return;api('/api/custom?id='+c.id).then(j=>j&&j.ok&&toast('נשלח'))});let t=null;
+  const del=async()=>{b._lp=true;if(confirm('למחוק את "'+c.name+'"?')){await api('/api/custom/delete?id='+c.id);load()}setTimeout(()=>b._lp=false,300)};
+  b.addEventListener('touchstart',()=>{t=setTimeout(del,650)},{passive:true});['touchend','touchmove'].forEach(e=>b.addEventListener(e,()=>clearTimeout(t)));
+  b.addEventListener('contextmenu',e=>{e.preventDefault();clearTimeout(t);del()});l.appendChild(b)})})}
+function newCustom(g){const n=prompt(g==='ac'?'שם לכפתור (למשל: מזגן שינה)':'שם לכפתור (למשל: Netflix)');if(n&&n.trim())learnSeq([{type:'custom',g,name:n.trim(),label:n.trim()}],'כפתור חדש')}
+function acScenes(){const L=[['מזגן כיבוי','כבה את המזגן בשלט'],['מזגן קירור 24','קירור, 24°, ואז לחץ הפעלה'],['מזגן קירור 22','קירור, 22°'],['מזגן חימום 26','חימום, 26°'],['מזגן חימום 24','חימום, 24°']];
+ learnSeq(L.map(([n,h])=>({type:'custom',g:'ac',name:n,label:n,hint:'כוון את השלט: '+h+'. לחץ על הכפתור האחרון שמעביר את המצב.'})),'מצבי מזגן')}
+// ---------- learning (single + sequential wizard)
+async function learn1(type){const j=await api('/api/learn?type='+type);if(!j||j.ok===false)return;
+ openModal(type==='ac'?'זיהוי מזגן':'זיהוי טלוויזיה',type==='ac'?'כוון את שלט המזגן למכשיר ולחץ על כפתור כלשהו (למשל שינוי טמפרטורה)':'כוון את שלט הטלוויזיה למכשיר ולחץ על ווליום או ערוץ',true);
+ waitLearn(s=>{$('mpulse').style.display='none';$('mtitle').textContent=s.status==='done'?'✅ הצליח':'⚠️ '+(s.status==='timeout'?'לא נקלט':'שימו לב');
+  $('mmsg').textContent=s.msg;load();
+  if(s.status!=='done'&&type==='tv')$('mbody').append(el('button','b p','בחירת מותג ובדיקה',tvBrands),el('button','b','לימוד מהשלט',tvLearnAll));
+  if(s.status!=='done'&&type==='ac')$('mbody').append(el('button','b p','למד מצבי מזגן',acScenes))})}
+function waitLearn(done){clearInterval(poll);poll=setInterval(async()=>{const s=await api('/api/learn/status');if(!s||s.status==='listening')return;clearInterval(poll);done(s)},600)}
+function learnSeq(items,title){wiz={items,i:0,ok:0,title};wizStep()}
+async function wizStep(){const w=wiz;if(!w)return;if(w.i>=w.items.length){wiz=null;openModal('✅ סיום',w.ok+' כפתורים נלמדו',false);$('mpulse').style.display='none';load();return}
+ const it=w.items[w.i];let u='/api/learn?type='+it.type+(it.key?'&key='+it.key:'')+(it.name?'&name='+encodeURIComponent(it.name):'')+(it.g?'&g='+it.g:'');
+ const j=await api(u);if(!j||j.ok===false){wiz=null;return}
+ openModal(w.title+(w.items.length>1?' ('+(w.i+1)+'/'+w.items.length+')':''),'',true);
+ const b=$('mbody');if(w.items.length>1){const pr=el('div','prog');const bar=el('i');bar.style.width=(w.i/w.items.length*100)+'%';pr.appendChild(bar);b.appendChild(pr)}
+ b.append(el('div','note','לחץ בשלט המקורי על:'),el('div','keyname',it.label),el('p','note',it.hint||'כוון את השלט למכשיר, ממרחק של כחצי מטר.'));
+ if(w.items.length>1)b.append(el('button','b','דלג על הכפתור הזה',()=>{api('/api/learn/cancel');w.i++;wizStep()}));
+ waitLearn(s=>{if(wiz!==w)return;if(s.status==='done'){w.ok++;w.i++;toast('✓ '+it.label);setTimeout(wizStep,500)}
+  else{$('mpulse').style.display='none';$('mmsg').textContent=s.msg;
+   $('mbody').append(el('button','b p','נסה שוב',wizStep),...(w.items.length>1?[el('button','b','דלג',()=>{w.i++;wizStep()})]:[]))}})}
+function openModal(t,m,listening){$('mtitle').textContent=t;$('mmsg').textContent=m;$('mbody').innerHTML='';$('mpulse').style.display=listening?'block':'none';$('modal').style.display='flex'}
+function closeModal(){clearInterval(poll);wiz=null;$('modal').style.display='none';api('/api/learn/cancel')}
+// ---------- quick access
+function copyText(t){const a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();
+ let ok=false;try{ok=document.execCommand('copy')}catch(e){}a.remove();if(!ok&&navigator.clipboard)navigator.clipboard.writeText(t).then(()=>{},()=>{});toast('הועתק ✓')}
+function renderQuick(){const ip='http://'+S.ip,ios=/iphone|ipad|mac/i.test(navigator.userAgent),base=ios?'http://irblaster.local':ip,k='k='+K;
+ $('qip').textContent=ip;$('qios').hidden=!S.ios;$('qiosmissing').hidden=!!S.ios;if(S.ios)$('qios').href=S.ios;$('qimp').href='http-shortcuts://import?url='+encodeURIComponent(ip+'/export/android.json?'+k);
+ const a=$('q-and'),i=$('q-ios');if(ios)a.parentNode.insertBefore(i,a);
+ const L=[['שלט מלא','/'],['שלט טלוויזיה','/?tab=tv'],['מזגן הפעלה','/api/ac?power=on&'+k],['מזגן כיבוי','/api/ac?power=off&'+k],['מזגן 24° קירור','/api/ac?power=on&mode=cool&temp=24&'+k],
+  ['מזגן טמפ׳ +','/api/ac?temp=up&'+k],['מזגן טמפ׳ −','/api/ac?temp=down&'+k]].concat(Object.keys(KEYS).slice(0,6).map(x=>[KEYS[x],'/api/tv?key='+x+'&'+k]))
+  .concat(S.custom.map(c=>[(c.g==='ac'?'❄️ ':'📺 ')+c.name,'/api/custom?id='+c.id+'&'+k]));
+ const q=$('qurls');q.innerHTML='';L.forEach(([n,u])=>{const r=el('div','url');r.append(el('span','',n),el('button','chip','העתק',()=>copyText(base+u)));q.appendChild(r)})}
+// ---------- settings
+async function loadProtos(){const j=await api('/api/acprotocols');if(!j)return;const sel=$('acproto_sel');sel.innerHTML='';
+ const g1=el('optgroup');g1.label='מותגים נפוצים';const g2=el('optgroup');g2.label='כל הפרוטוקולים';
+ sel.add(new Option('— בחר —','0'));ACB.forEach(([p,n])=>{const f=j.find(x=>x.name===p);if(f)g1.appendChild(new Option(n,f.id))});
+ j.forEach(x=>g2.appendChild(new Option(x.name,x.id)));sel.append(g1,g2);if(S)sel.value=S.ac.protoId}
+async function saveAcProto(){const j=await api('/api/settings?acproto='+$('acproto_sel').value+'&acmodel='+$('acmodel').value);if(j&&j.ok){toast('נשמר');load()}}
+async function savePw(){const p=$('admpw').value;if(p.length<6){toast('לפחות 6 תווים');return}
+ try{const r=await fetch('/api/admin/password',{method:'POST',headers:{'X-Key':K,'Content-Type':'application/x-www-form-urlencoded'},body:'p='+encodeURIComponent(p)});
+  if(r.status===401){toast('נדרשת הסיסמה הנוכחית');return}const j=await r.json();if(j.ok){$('admpw').value='';toast('הסיסמה נשמרה');load()}}catch(e){toast('שגיאה')}}
+async function saveIos(){const j=await api('/api/admin/ios?url='+encodeURIComponent($('iosurl').value.trim()));if(j&&j.ok){toast('נשמר');load()}}
+async function testTx(){toast('משדר…');await api('/api/admin/test/tx?pin='+$('txp').value);toast('סיום')}
+async function scanRx(){$('scanres').textContent='סורק 6 שניות – לחץ על כפתורים בשלט עכשיו…';const j=await api('/api/admin/test/rx');if(!j)return;
+ $('scanres').textContent=j.pins.length?('פינים עם פעילות: '+j.pins.sort((a,b)=>b.n-a.n).map(p=>'GPIO'+p.pin+' ('+p.n+')').join(', ')+' – הראשון ברשימה הוא כנראה המקלט.'):'לא זוהתה פעילות.'}
+async function savePins(){if(!confirm('לשמור ולהפעיל מחדש?'))return;const j=await api('/api/admin/pins?tx='+$('txp').value+'&rx='+$('rxp').value);if(j&&j.ok){toast('מופעל מחדש…');setTimeout(load,7000)}}
+// ---------- main
+function nav(p){document.querySelectorAll('nav button,.page').forEach(e=>e.classList.remove('act'));const b=document.querySelector('nav button[data-p="'+p+'"]');if(b)b.classList.add('act');$('p-'+p).classList.add('act')}
+async function load(){if(!K){try{K=(await (await fetch('/api/session')).json()).k}catch(e){}}
+ const j=await api('/api/state');if(!j)return;S=j;$('sub').textContent=j.portal?'מצב ישיר (IR_WIFI)':('מחובר · '+j.ssid+' · '+j.ip);
+ renderAc(j.ac);renderTv();renderCustom();renderQuick();$('iosurl').value=j.ios||'';$('txp').value=j.tx;$('rxp').value=j.rx;$('acmodel').value=j.ac.model;
+ if($('acproto_sel').options.length)$('acproto_sel').value=j.ac.protoId;
+ $('admstate').textContent=j.admin?'✅ מוגדרת סיסמת ניהול.':'⚠️ לא מוגדרת סיסמת ניהול – כל מי שמחובר לרשת הביתית יכול לעדכן קושחה. מומלץ להגדיר.';
+ $('sysinfo').textContent='גרסה '+j.v+' · אות '+j.rssi+'dBm'+(j.fs?'':' · ⚠️ אין מערכת קבצים – לימוד כפתורים לא זמין')}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>nav(b.dataset.p));
+const T=new URLSearchParams(location.search).get('tab');if(T)nav(T);
+load().then(loadProtos);
+</script></body></html>
