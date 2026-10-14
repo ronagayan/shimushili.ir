@@ -35,8 +35,8 @@ RULES = dict(
 W_SIG, W_PWR, W_LED = 0.2, 0.5, 0.4
 
 # 8 rim LEDs (angles in degrees, maths convention: 0 = right, 90 = up/antenna side).
-# The antenna sits in a 70 deg gap at the top; the other seven gaps are equal (~41 deg).
-GAP = 70.0
+# The antenna sits in a 76 deg gap at the top; the other seven gaps are equal (~41 deg).
+GAP = 76.0
 RIM = [90.0 - GAP / 2, 90.0 + GAP / 2] + [90.0 + GAP / 2 + (360.0 - GAP) / 7 * k for k in range(1, 7)]
 # strings of two (first LED gets the series resistor), never across the antenna gap
 STRINGS = [("A", 7, 0), ("B", 1, 2), ("C", 3, 4), ("D", 5, 6)]   # indices into RIM
@@ -52,7 +52,7 @@ def polar(r, ang):
 def build():
     b = Board(Point(C, C).buffer(R, 256), RULES)
     # ------------------------------------------------------------ footprints
-    WROOM = fp("ESP32-S3-WROOM-1")
+    WROOM = fp("ESP32-C3-WROOM-02")
     USB = fp("USB_C_Receptacle_HRO_TYPE-C-31-M-12")
     SOT223 = fp("SOT-223-3_TabPin2")
     SOT23 = fp("SOT-23")
@@ -67,18 +67,24 @@ def build():
     IRLED = ("TSAL6400 940nm", "C94857", "Vishay TSAL6400")
 
     # ------------------------------------------------------------ module (antenna at the top edge)
+    # ESP32-C3-WROOM-02 (18 x 20 mm, castellated, Economic-assembly part). Footprint origin = pad centre;
+    # body spans y -13 (antenna end) .. +7, antenna area -13 .. -7.
     top = C - math.sqrt(R ** 2 - 9.9 ** 2) + 0.1   # antenna corners just inside the circle
-    MX, MY = C, top + 15.75
-    wroom_nets = {str(i): "NC" for i in range(1, 42)}
-    wroom_nets.update({"1": "GND", "2": "3V3", "3": "EN", "5": "IR_RX", "13": "USB_DM", "14": "USB_DP",
-                       "20": "IR_TX", "27": "BOOT", "39": "LED_STAT", "40": "GND", "41": "GND"})
-    u1 = b.add(Component("U1", WROOM, MX, MY, 0, "ESP32-S3-WROOM-1-N16R8", "C2913202", "ESP32-S3-WROOM-1-N16R8", wroom_nets))
-    u1.cpl_center = (MX, MY - 3.0)  # module body centre (18 x 25.5 mm)
-    ant = box(MX - 9 - 5, -1, MX + 9 + 5, MY - 9.8 + 0.2)  # no copper around the antenna, both layers
+    MX, MY = C, top + 13.0
+    wroom_nets = {str(i): "NC" for i in range(1, 20)}
+    wroom_nets.update({"1": "3V3", "2": "EN", "3": "IR_TX", "4": "IR_RX", "7": "STRAP8", "8": "BOOT", "9": "GND",
+                       "10": "LED_STAT", "13": "USB_DM", "14": "USB_DP", "16": "STRAP2", "19": "GND"})
+    u1 = b.add(Component("U1", WROOM, MX, MY, 0, "ESP32-C3-WROOM-02-N4", "C2934560", "ESP32-C3-WROOM-02-N4", wroom_nets))
+    u1.cpl_center = (MX, MY - 3.0)  # module body centre (18 x 20 mm)
+    ant = box(MX - 9 - 5, -1, MX + 9 + 5, MY - 7.0 + 0.2)  # no copper around the antenna, both layers
     b.keepout["top"].append(ant)
     b.keepout["bot"].append(ant)
-    b.route_block["bot"].append(box(MX - 9.0, MY - 9.8, MX + 9.0, MY + 9.75))
-    b.route_block["top"].append(box(MX - 8.0, MY - 9.8, MX + 8.0, MY + 8.9))
+    b.route_block["bot"].append(box(MX - 9.0, MY - 7.0, MX + 9.0, MY + 7.0))
+    b.route_block["top"].append(box(MX - 7.9, MY - 7.0, MX + 7.9, MY + 7.0))
+    # strapping pins GPIO2 / GPIO8 held high for a normal boot and for USB download mode
+    R0603_ = fp("R_0603_1608Metric")
+    b.add(Component("R14", R0603_, MX + 11.2, MY - 3.9, 180, "10k", "C25804", "0603WAF1002T5E", {"1": "3V3", "2": "STRAP2"}))
+    b.add(Component("R15", R0603_, MX - 12.4, MY + 6.4, 0, "10k", "C25804", "0603WAF1002T5E", {"1": "3V3", "2": "STRAP8"}))
 
     # ------------------------------------------------------------ rim LEDs: 5 mm, leads bent 90 deg, lens pointing outward
     rp = R - LED_TIP_INSET - LED_TIP       # radius of the pad pair
@@ -135,10 +141,10 @@ def build():
     b.add(Component("C1", C0805, C + 5.8, 51.0, 90, "10uF", "C15850", "CL21A106KAYNNNE", {"1": "VBUS", "2": "GND"}))
     b.add(Component("C2", C0805, C - 6.6, 50.0, 90, "22uF", "C45783", "CL21A226MAQNNNE", {"1": "3V3", "2": "GND"}))
     # module decoupling next to the 3V3 pin, EN reset RC
-    b.add(Component("C4", C0603, MX - 11.4, MY - 8.2, 180, "100nF", "C14663", "CC0603KRX7R9BB104", {"1": "3V3", "2": "GND"}))
-    b.add(Component("R3", R0603, MX - 10.9, MY - 5.7, 0, "10k", "C25804", "0603WAF1002T5E", {"1": "3V3", "2": "EN"}))
-    b.add(Component("C5", C0603, MX - 10.9, MY - 4.0, 180, "1uF", "C15849", "CL10A105KB8NNNC", {"1": "EN", "2": "GND"}))
-    b.add(Component("C3", C0805, MX - 13.4, MY + 11.8, 0, "22uF", "C45783", "CL21A226MAQNNNE", {"1": "3V3", "2": "GND"}))
+    b.add(Component("C4", C0603, MX - 11.4, MY - 5.9, 180, "100nF", "C14663", "CC0603KRX7R9BB104", {"1": "3V3", "2": "GND"}))
+    b.add(Component("R3", R0603, MX - 11.8, MY - 4.3, 0, "10k", "C25804", "0603WAF1002T5E", {"1": "3V3", "2": "EN"}))
+    b.add(Component("C5", C0603, MX - 11.8, MY - 2.7, 180, "1uF", "C15849", "CL10A105KB8NNNC", {"1": "EN", "2": "GND"}))
+    b.add(Component("C3", C0805, MX - 0.6, MY + 10.0, 0, "22uF", "C45783", "CL21A226MAQNNNE", {"1": "3V3", "2": "GND"}))
 
     # ------------------------------------------------------------ IR receiver at the left rim, dome facing outward
     ra = 184.0
@@ -157,8 +163,8 @@ def build():
     tp = Footprint.__new__(Footprint)
     tp.name, tp.silk, tp.crt = "TestPoint_Pad_D1.5mm", [], []
     tp.pads = [Pad("1", "smd", "circle", 0, 0, 0, 1.5, 1.5, None, ["F.Cu", "F.Mask"])]
-    b.add(Component("TP1", tp, MX + 12.0, MY + 12.6, 0, "BOOT", "", "", {"1": "BOOT"}))
-    b.add(Component("TP2", tp, MX + 14.8, MY + 12.6, 0, "GND", "", "", {"1": "GND"}))
+    b.add(Component("TP1", tp, MX - 7.4, MY + 10.0, 0, "BOOT", "", "", {"1": "BOOT"}))
+    b.add(Component("TP2", tp, MX - 4.6, MY + 10.0, 0, "GND", "", "", {"1": "GND"}))
 
     # ------------------------------------------------------------ mounting holes (M2), in the gaps between rim LEDs
     mh = Footprint.__new__(Footprint)
@@ -230,7 +236,7 @@ def add_silk(b):
             print("note: no room for label", c.ref)
     b.silk_text_bot = [
         ("Shimushili IR", C, 36.0, 2.6, 0),
-        ("v0.2  2026-10", C, 40.0, 1.6, 0),
+        ("v0.3  2026-10", C, 40.0, 1.6, 0),
         ("shimushili.com", C, 43.0, 1.6, 0),
     ]
 
@@ -238,9 +244,10 @@ def add_silk(b):
 def route(b):
     # GND pads get vias to the bottom plane (stitching) – done after routing.
     order = [
-        ("USB_DP", W_SIG), ("USB_DM", W_SIG), ("CC1", W_SIG), ("CC2", W_SIG), ("EN", W_SIG), ("IR_RX", W_SIG),
-        ("BOOT", W_SIG), ("LED_STAT", W_SIG), ("STAT_A", W_SIG), ("IR_TX", W_SIG), ("GATE", W_SIG),
-        ("VBUS", W_PWR), ("3V3", W_PWR), ("RX_VCC", W_SIG),
+        ("USB_DM", W_SIG), ("USB_DP", W_SIG), ("CC1", W_SIG), ("CC2", W_SIG), ("EN", W_SIG),
+        ("STRAP8", W_SIG), ("BOOT", W_SIG), ("IR_RX", W_SIG), ("STRAP2", W_SIG),
+        ("LED_STAT", W_SIG), ("STAT_A", W_SIG), ("IR_TX", W_SIG), ("GATE", W_SIG),
+        ("VBUS", W_PWR), ("3V3", 0.35), ("RX_VCC", W_SIG),
         ("DRAIN", W_LED), ("LEDU1", W_LED), ("LEDU2", W_LED),
         ("LEDA1", W_LED), ("LEDA2", W_LED), ("LEDB1", W_LED), ("LEDB2", W_LED),
         ("LEDC1", W_LED), ("LEDC2", W_LED), ("LEDD1", W_LED), ("LEDD2", W_LED),
@@ -272,6 +279,12 @@ def route(b):
             b.route(net, w, pads=[J["A6"], U["14"]])
         elif net == "USB_DM":
             b.route(net, w, pads=[J["B7"], U["13"]])
+        elif net == "3V3":
+            # main 3V3 tree at power width; the strapping pull-up only needs a thin branch
+            P3 = [p for p in b.pads() if p.net == "3V3" and p.comp.ref != "R14"]
+            b.route(net, w, pads=P3)
+            r14 = next(p for p in b.pads() if p.label == "R14.1")
+            b.route(net, W_SIG, pads=[P3[0], r14], via_cost=10)
         elif net == "VBUS":
             others = [p for p in b.pads() if p.net == "VBUS" and p.comp.ref != "J1"]
             b.route(net, w, pads=[J["A4"]] + others)

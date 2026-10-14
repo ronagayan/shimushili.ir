@@ -51,7 +51,7 @@
 #include "tv_codes.h"
 #include "web_assets.h"
 
-#define FW_VERSION "1.4.2"
+#define FW_VERSION "1.5.0"
 #define HOSTNAME   "irblaster"
 #define AP_NAME    "IR_WIFI"
 #define MAX_CUSTOM 60
@@ -74,6 +74,19 @@
 const uint8_t SCAN_PINS[] = {1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48};
 const uint8_t TX_CANDIDATES[] = {4, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48};
 bool inputOnly(uint8_t) { return false; }
+#elif CONFIG_IDF_TARGET_ESP32C3
+#define CHIP_ID "esp32c3"
+// Shimushili IR board v0.3 (ESP32-C3-WROOM-02): IR LEDs on GPIO4, receiver on GPIO5,
+// status LED on GPIO10.
+#define DEFAULT_TX_PIN 4
+#define DEFAULT_RX_PIN 5
+#define STATUS_LED_PIN 10
+#define MAX_GPIO 21
+// Usable GPIOs (skips 2/8/9 strapping, 11-17 flash, 18/19 USB).
+const uint8_t SCAN_PINS[] = {0, 1, 3, 4, 5, 6, 7, 10, 20, 21};
+const uint8_t TX_CANDIDATES[] = {4, 0, 1, 3, 5, 6, 7, 10, 20, 21};
+bool inputOnly(uint8_t) { return false; }
+#define SINGLE_GPIO_BANK
 #else
 #define CHIP_ID "esp32"
 #define DEFAULT_TX_PIN 4
@@ -631,10 +644,15 @@ String scanRxPins() {
   for (uint8_t p : SCAN_PINS)
     if (p != txPin && p != rxPin) pinMode(p, inputOnly(p) ? INPUT : INPUT_PULLUP);
   delay(5);
-  uint32_t prev0 = REG_READ(GPIO_IN_REG), prev1 = REG_READ(GPIO_IN1_REG);
+#ifdef SINGLE_GPIO_BANK
+#define READ_IN1() 0u
+#else
+#define READ_IN1() REG_READ(GPIO_IN1_REG)
+#endif
+  uint32_t prev0 = REG_READ(GPIO_IN_REG), prev1 = READ_IN1();
   uint32_t end = millis() + 6000, n = 0;
   while ((int32_t)(millis() - end) < 0) {
-    uint32_t c0 = REG_READ(GPIO_IN_REG), c1 = REG_READ(GPIO_IN1_REG);
+    uint32_t c0 = REG_READ(GPIO_IN_REG), c1 = READ_IN1();
     uint32_t d0 = c0 ^ prev0, d1 = c1 ^ prev1;
     if (d0 | d1) {
       for (uint8_t p : SCAN_PINS) {

@@ -17,12 +17,14 @@ jobs:
       - name: Pick the newest firmware per chip
         run: |
           cd firmware/releases
-          esp32=$(ls IRBlaster-*.bin | grep -v -- '-s3' | sort -V | tail -1)
+          esp32=$(ls IRBlaster-*.bin | grep -v -- '-s3' | grep -v -- '-c3' | sort -V | tail -1)
           v=$(basename "$esp32" .bin | sed 's/IRBlaster-//')
           cp "$esp32" ../../firmware-esp32.bin
           cp "$esp32" ../../firmware.bin            # older apps
           [ -f "IRBlaster-$v-s3.bin" ] && cp "IRBlaster-$v-s3.bin" ../../firmware-esp32s3.bin
           [ -f "IRBlaster-$v-s3-factory.bin" ] && cp "IRBlaster-$v-s3-factory.bin" ../../firmware-esp32s3-factory.bin
+          [ -f "IRBlaster-$v-c3.bin" ] && cp "IRBlaster-$v-c3.bin" ../../firmware-esp32c3.bin
+          [ -f "IRBlaster-$v-c3-factory.bin" ] && cp "IRBlaster-$v-c3-factory.bin" ../../firmware-esp32c3-factory.bin
           cd ../..
           echo "{\"version\": \"$v\"}" > version.json
           ls -la firmware*.bin version.json
@@ -37,4 +39,4 @@ jobs:
             version.json
           body: |
             האפליקציה מעדכנת את השלט מכאן (הגדרות ← עדכון קושחה).
-            firmware-esp32s3-factory.bin = צריבה מלאה ליחידה חדשה דרך USB (כתובת 0x0).
+            firmware-esp32s3-factory.bin / firmware-esp32c3-factory.bin = צריבה מלאה ליחידה חדשה דרך USB (כתובת 0x0).
