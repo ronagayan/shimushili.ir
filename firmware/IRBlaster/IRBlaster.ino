@@ -46,11 +46,12 @@
 #include "src/IRremoteESP8266/IRutils.h"
 #include "src/IRremoteESP8266/ir_Kelon.h"
 #include <vector>
+#include <algorithm>
 #include "soc/gpio_reg.h"
 #include "tv_codes.h"
 #include "web_assets.h"
 
-#define FW_VERSION "1.4.1"
+#define FW_VERSION "1.4.2"
 #define HOSTNAME   "irblaster"
 #define AP_NAME    "IR_WIFI"
 #define MAX_CUSTOM 60
@@ -109,6 +110,32 @@ bool portalConnecting = false;
 uint32_t portalConnStart = 0;
 uint32_t apOffAt = 0;         // when to close the IR_WIFI network after success
 String connState = "idle";    // idle | connecting | ok | fail
+volatile uint8_t lastDiscReason = 0;  // last WIFI_REASON_* from a failed connect
+uint8_t connTry = 0;                  // portal connect attempt (several, for mesh networks)
+String connMsg = "";                  // human-readable reason when connState == "fail"
+String portalSsid, portalPass;
+
+// Mesh routers (Deco, Orbi, eero…) broadcast the same network name from several units.
+// Scan every channel and join the strongest unit, not the first one heard.
+void wifiBegin(const String& ssid, const String& pass) {
+  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+  WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
+  lastDiscReason = 0;
+  WiFi.begin(ssid.c_str(), pass.c_str());
+}
+
+String reasonText(uint8_t r) {
+  switch (r) {
+    case 2: case 15: case 202: case 204: case 23:   // AUTH_EXPIRE, 4WAY_HANDSHAKE_TIMEOUT, AUTH_FAIL, HANDSHAKE_TIMEOUT, 802_1X_AUTH_FAILED
+      return "הרשת דחתה את הסיסמה. בדוק אותה שוב (אותיות גדולות/קטנות, רווחים). אם היא נכונה – קרב את השלט לנתב או ליחידת Deco ונסה שוב.";
+    case 201: case 210: case 211:                   // NO_AP_FOUND (+ security variants)
+      return "השלט לא מוצא את הרשת. ודא שהיא רשת 2.4GHz (השלט לא תומך ב-5GHz בלבד) ושהשם נכון.";
+    case 212:
+      return "הקליטה של הרשת חלשה מדי. קרב את השלט לנתב ונסה שוב.";
+    default:
+      return "השלט לא הצליח להתחבר לרשת (קוד " + String(r) + "). קרב אותו לנתב ונסה שוב.";
+  }
+}
 
 IRsend *irsend = nullptr;
 IRac   *irac   = nullptr;
@@ -1063,12 +1090,20 @@ void setupRoutes() {
   server.on("/scan", HTTP_GET, []() {
     if (!portalMode) { server.send(404, "text/plain", "not found"); return; }
     int n = WiFi.scanNetworks();
-    String s = "[";
+    // one entry per network name (mesh units repeat it), strongest signal first
+    std::vector<std::pair<String, int>> nets;
     for (int i = 0; i < n; i++) {
-      if (WiFi.SSID(i).length() == 0) continue;
-      s += String(s.length() > 1 ? "," : "") + "{\"s\":\"" + jsonEscape(WiFi.SSID(i)) + "\",\"r\":" + String(WiFi.RSSI(i)) + "}";
+      String id = WiFi.SSID(i);
+      if (id.length() == 0) continue;
+      bool dup = false;
+      for (auto& e : nets) if (e.first == id) { dup = true; if (WiFi.RSSI(i) > e.second) e.second = WiFi.RSSI(i); }
+      if (!dup) nets.push_back({id, (int)WiFi.RSSI(i)});
     }
     WiFi.scanDelete();
+    std::sort(nets.begin(), nets.end(), [](const std::pair<String, int>& a, const std::pair<String, int>& b) { return a.second > b.second; });
+    String s = "[";
+    for (auto& e : nets)
+      s += String(s.length() > 1 ? "," : "") + "{\"s\":\"" + jsonEscape(e.first) + "\",\"r\":" + String(e.second) + "}";
     sendJson(s + "]");
   });
   server.on("/save", HTTP_POST, []() {
@@ -1080,15 +1115,21 @@ void setupRoutes() {
     sendJson("{\"ok\":true}");
     // connect while keeping IR_WIFI up, so the page can show the new address
     connState = "connecting";
+    connMsg = "";
+    connTry = 1;
+    portalSsid = s;
+    portalPass = p;
     portalConnecting = true;
     portalConnStart = millis();
     WiFi.disconnect();
-    WiFi.begin(s.c_str(), p.c_str());
+    delay(100);
+    wifiBegin(s, p);
   });
   server.on("/api/conn", HTTP_GET, []() {
     if (!portalMode) { server.send(404, "text/plain", "not found"); return; }
     sendJson("{\"s\":\"" + connState + "\",\"ip\":\"" +
-             (connState == "ok" ? WiFi.localIP().toString() : String("")) + "\"}");
+             (connState == "ok" ? WiFi.localIP().toString() : String("")) + "\",\"t\":" + String(connTry) +
+             ",\"c\":" + String(lastDiscReason) + ",\"m\":\"" + jsonEscape(connMsg) + "\"}");
   });
   server.on("/api/finish", HTTP_GET, []() {
     if (!portalMode) { server.send(404, "text/plain", "not found"); return; }
@@ -1240,11 +1281,22 @@ void setup() {
   // -> otherwise open the "IR_WIFI" setup portal.
   WiFi.setHostname(HOSTNAME);  // must be set before WiFi.mode() to show up in the router
   WiFi.mode(WIFI_STA);
+  WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t info) { lastDiscReason = info.wifi_sta_disconnected.reason; },
+               ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   String ssid = prefs.getString("ssid", "");
-  if (ssid.length()) WiFi.begin(ssid.c_str(), prefs.getString("pass", "").c_str());
-  else WiFi.begin();
   uint32_t t0 = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000) delay(200);
+  if (ssid.length()) {
+    String pass = prefs.getString("pass", "");
+    for (int a = 0; a < 2 && WiFi.status() != WL_CONNECTED; a++) {  // second try helps on mesh networks
+      if (a) { WiFi.disconnect(); delay(300); }
+      wifiBegin(ssid, pass);
+      uint32_t ta = millis();
+      while (WiFi.status() != WL_CONNECTED && millis() - ta < 15000) delay(200);
+    }
+  } else {
+    WiFi.begin();
+    while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000) delay(200);
+  }
 
   if (WiFi.status() == WL_CONNECTED) {
     WiFi.setAutoReconnect(true);
@@ -1280,10 +1332,20 @@ void loop() {
         apOffAt = millis() + 180000;  // close IR_WIFI after 3 min even if "finish" isn't pressed
         Serial.print("Connected from portal, IP: ");
         Serial.println(WiFi.localIP());
-      } else if (millis() - portalConnStart > 20000) {
-        portalConnecting = false;
-        connState = "fail";
-        WiFi.disconnect();
+      } else if (millis() - portalConnStart > 11000) {
+        if (connTry < 3) {  // mesh units sometimes refuse the first attempt: try again, strongest unit first
+          connTry++;
+          portalConnStart = millis();
+          WiFi.disconnect();
+          delay(100);
+          wifiBegin(portalSsid, portalPass);
+        } else {
+          portalConnecting = false;
+          connState = "fail";
+          connMsg = reasonText(lastDiscReason);
+          Serial.printf("Portal connect failed, reason %d\n", lastDiscReason);
+          WiFi.disconnect();
+        }
       }
     }
     if (apOffAt && (int32_t)(millis() - apOffAt) > 0) stopPortal();

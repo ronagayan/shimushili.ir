@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -81,6 +82,7 @@ fun FindDevice(onFound: () -> Unit) {
     var networks by remember { mutableStateOf(listOf<String>()) }
     var ssid by remember { mutableStateOf("") }
     var pass by remember { mutableStateOf("") }
+    var showPass by remember { mutableStateOf(false) }
     var round by remember { mutableIntStateOf(0) }
 
     suspend fun loadNetworks(n: Network?) {
@@ -90,7 +92,8 @@ fun FindDevice(onFound: () -> Unit) {
             phase = "connect"
             return
         }
-        networks = List(arr.length()) { arr.getJSONObject(it).getString("s") }.distinct()
+        networks = List(arr.length()) { arr.getJSONObject(it) }
+            .sortedByDescending { it.optInt("r", -100) }.map { it.getString("s") }.distinct()
         msg = ""
         phase = "wifi"
     }
@@ -137,13 +140,13 @@ fun FindDevice(onFound: () -> Unit) {
             try {
                 Api.raw("/save", apBase, net, form = "s=${enc(ssid)}&p=${enc(pass)}")
                 var ip: String? = null
-                repeat(25) {
+                repeat(40) {
                     if (ip == null) {
                         delay(1500)
                         val j = runCatching { JSONObject(Api.raw("/api/conn", apBase, net)) }.getOrNull()
                         when (j?.optString("s")) {
                             "ok" -> ip = j?.optString("ip")
-                            "fail" -> throw ApiException("השלט לא הצליח להתחבר. בדוק את הסיסמה ונסה שוב.")
+                            "fail" -> throw ApiException(j.optString("m").ifBlank { "השלט לא הצליח להתחבר. בדוק את הסיסמה ונסה שוב." })
                         }
                     }
                 }
@@ -206,7 +209,9 @@ fun FindDevice(onFound: () -> Unit) {
             OutlinedTextField(ssid, { ssid = it }, label = { Text("שם הרשת") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(
                 pass, { pass = it }, label = { Text("סיסמת ה-WiFi") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                trailingIcon = { TextButton(onClick = { showPass = !showPass }) { Text(if (showPass) "הסתר" else "הצג") } },
             )
             WideButton("חבר את השלט") { if (ssid.isNotBlank()) join() }
         }
