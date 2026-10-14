@@ -239,6 +239,14 @@ class Board:
             vobs += [geom for n, geom in self.copper(ly, include_pour=False) if n != net]
             vobs += self.keepout[ly]
         vblocked = unary_union(vobs).buffer(clr + vr + self.r['grid_margin'], 8)
+        # drill-to-drill spacing to holes of other nets (vias and THT pads)
+        h2h = self.r.get("hole_to_hole", 0.0)
+        if h2h:
+            dr = self.r["via_drill"] / 2
+            others_h = [Point(x, y).buffer(d / 2 + h2h + dr + self.r['grid_margin'], 12)
+                        for (x, y, d, pl, slot) in self.holes() if slot is None and not self._hole_is_net(x, y, net)]
+            if others_h:
+                vblocked = vblocked.union(unary_union(others_h))
         # never drop a via into (or partly into) a pad, even one of the same net (solder wicking)
         own_pads = [p.shape for p in self.pads() if p.net == net]
         if own_pads:
@@ -509,6 +517,15 @@ class Board:
             pad_groups = [g for g in pad_groups if g]
             res[n] = pad_groups
         return res
+
+    def _hole_is_net(self, x, y, net):
+        for n, vx, vy in self.vias:
+            if n == net and abs(vx - x) < 1e-6 and abs(vy - y) < 1e-6:
+                return True
+        for pp in self.pads():
+            if pp.net == net and pp.drill and abs(pp.cx - x) < 1e-6 and abs(pp.cy - y) < 1e-6:
+                return True
+        return False
 
     def holes(self):
         """(x, y, drill_d, plated, slot) list; slot = None or (x2,y2) end point for oval drills."""
